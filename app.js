@@ -158,20 +158,35 @@
     Object.entries(remoteData || {}).forEach(([paperId, remoteRecord]) => {
       if (!remoteRecord || typeof remoteRecord !== "object" || Array.isArray(remoteRecord)) return;
       const localRecord = merged[paperId] || {};
-      const completed = { ...(localRecord.completed || {}) };
-      Object.entries(remoteRecord.completed || {}).forEach(([taskId, remoteResult]) => {
-        const localResult = completed[taskId];
-        if (!localResult || Number(remoteResult?.at || 0) > Number(localResult?.at || 0)) {
-          completed[taskId] = remoteResult;
-        }
-      });
-      merged[paperId] = {
+      const localClearedAt = Number(localRecord.clearedAt) || 0;
+      const remoteClearedAt = Number(remoteRecord.clearedAt) || 0;
+      const clearedAt = Math.max(localClearedAt, remoteClearedAt);
+      const completed = {};
+      const addCompleted = (taskId, result) => {
+        if (!result || Number(result.at || 0) <= clearedAt) return;
+        const current = completed[taskId];
+        if (!current || Number(result.at || 0) > Number(current.at || 0)) completed[taskId] = result;
+      };
+      Object.entries(localRecord.completed || {}).forEach(([taskId, result]) => addCompleted(taskId, result));
+      Object.entries(remoteRecord.completed || {}).forEach(([taskId, result]) => addCompleted(taskId, result));
+      const deletedSources = [];
+      if (localClearedAt >= clearedAt) deletedSources.push(localRecord.deletedWrong || []);
+      if (remoteClearedAt >= clearedAt) deletedSources.push(remoteRecord.deletedWrong || []);
+      const deletedWrong = [...new Set(deletedSources.flat())];
+      const bestValues = [];
+      if (localClearedAt >= clearedAt) bestValues.push(localRecord.best);
+      if (remoteClearedAt >= clearedAt) bestValues.push(remoteRecord.best);
+      Object.values(completed).forEach((result) => bestValues.push(result?.score));
+      const mergedRecord = {
         ...localRecord,
         ...remoteRecord,
         completed,
-        deletedWrong: [...new Set([...(localRecord.deletedWrong || []), ...(remoteRecord.deletedWrong || [])])],
-        best: Math.max(Number(localRecord.best) || 0, Number(remoteRecord.best) || 0)
+        deletedWrong,
+        best: Math.max(...bestValues.map((value) => Number(value) || 0), 0)
       };
+      if (clearedAt) mergedRecord.clearedAt = clearedAt;
+      else delete mergedRecord.clearedAt;
+      merged[paperId] = mergedRecord;
     });
     return merged;
   }
@@ -292,6 +307,8 @@
           const deletedWrong = Array.isArray(record.deletedWrong) ? record.deletedWrong.filter((key) => typeof key === "string") : [];
           const best = Number.isFinite(Number(record.best)) ? Number(record.best) : 0;
           imported[paperId] = { completed, deletedWrong, best };
+          const clearedAt = Number(record.clearedAt) || 0;
+          if (clearedAt > 0) imported[paperId].clearedAt = clearedAt;
         });
         if (Object.keys(payload.data).length && !Object.keys(imported).length) {
           throw new Error("no-known-papers");
@@ -311,6 +328,33 @@
     };
     reader.onerror = () => window.alert("\u65e0\u6cd5\u8bfb\u53d6\u6570\u636e\u6587\u4ef6\u3002");
     reader.readAsText(file);
+  }
+
+  function clearPaperProgress(paperId) {
+    const item = data.papers.find((entry) => entry.id === paperId);
+    if (!item) return;
+    const record = recordFor(paperId);
+    const hasProgress = Object.keys(record.completed || {}).length > 0 ||
+      Number(record.best) > 0 ||
+      (record.deletedWrong || []).length > 0;
+    if (!hasProgress) {
+      window.alert("本套试卷暂时没有需要清除的选择。");
+      return;
+    }
+    if (!window.confirm("确定清除“" + item.title + "”的全部作答、成绩和错题记录吗？")) return;
+    saved[paperId] = {
+      completed: {},
+      best: 0,
+      deletedWrong: [],
+      clearedAt: Date.now()
+    };
+    if (state.paperId === paperId) {
+      state.answers = {};
+      state.submitted = false;
+      state.showTranscript = false;
+    }
+    persist();
+    render();
   }
 
   function closeWrongMenu() { document.querySelector(".wrong-context-menu")?.remove(); }
@@ -365,7 +409,7 @@
     const done = completedCount(item);
     const progress = Math.round(done / item.tasks.length * 100);
     const best = recordFor(item.id).best || 0;
-    return `<article class="paper-card"><div><div class="paper-card-top"><div><div class="paper-kicker">CET-6 LISTENING</div><h3>${esc(item.title)}</h3><p class="paper-meta">${item.tasks.length} 组听力 · ${item.questionCount} 道题</p></div>${done === item.tasks.length ? '<span class="paper-badge">已完成</span>' : best ? `<span class="paper-badge">最高 ${best} 题</span>` : '<span class="paper-badge">未开始</span>'}</div></div><div><div class="paper-footer"><div class="progress-track"><i style="width:${progress}%"></i></div><span class="progress-number">${done}/${item.tasks.length} 组</span><button class="button primary" data-paper="${esc(item.id)}">${done ? "继续练习" : "开始练习"}</button></div></div></article>`;
+    return `<article class="paper-card"><div><div class="paper-card-top"><div><div class="paper-kicker">CET-6 LISTENING</div><h3>${esc(item.title)}</h3><p class="paper-meta">${item.tasks.length} 组听力 · ${item.questionCount} 道题</p></div>${done === item.tasks.length ? '<span class="paper-badge">已完成</span>' : best ? `<span class="paper-badge">最高 ${best} 题</span>` : '<span class="paper-badge">未开始</span>'}</div></div><div><div class="paper-footer"><div class="progress-track"><i style="width:${progress}%"></i></div><span class="progress-number">${done}/${item.tasks.length} 组</span><div class="paper-actions"><button class="button primary" data-paper="${esc(item.id)}">${done ? "继续练习" : "开始练习"}</button><button class="button paper-clear" type="button" data-action="clear-paper" data-clear-paper="${esc(item.id)}" title="清除本套试卷的作答、成绩和错题记录">清除本套选择</button></div></div></div></article>`;
   }
   function sidePapers() {
     return `<aside class="practice-side"><button class="side-back" data-action="home">← 返回试卷列表</button><div class="side-title">历年听力真题</div>${data.papers.map((item) => `<button class="side-paper ${item.id === state.paperId ? "active" : ""}" data-side-paper="${esc(item.id)}"><span>${esc(item.title)}</span><small>${completedCount(item)}/${item.tasks.length}</small></button>`).join("")}</aside>`;
@@ -621,6 +665,10 @@
     if (action === "open-mock") createMock();
     if (action === "mock-new") createMock();
     if (action === "open-wrong") { state.screen = "wrong"; render(); }
+    if (action === "clear-paper") {
+      clearPaperProgress(actionTarget.dataset.clearPaper);
+      return;
+    }
     if (action === "cloud-auth") {
       const sync = window.CET_FIREBASE_SYNC;
       if (state.cloudUser) sync?.signOut().catch(handleCloudError);

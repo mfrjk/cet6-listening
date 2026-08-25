@@ -242,3 +242,14 @@ body{background:radial-gradient(circle at 8% 0%,rgba(216,248,244,.72),transparen
 @media(max-width:380px){
   .nav-link{padding:8px 2px;font-size:10px}
 }
+
+
+.paper-actions{display:flex;align-items:center;gap:8px}
+.paper-clear{color:#a2524d!important;background:#fff1ef!important;border:1px solid #f4c9c3!important;box-shadow:none!important;padding:10px 12px!important;white-space:nowrap}
+.paper-clear:hover{background:#ffe3df!important;border-color:#e7aaa2!important}
+@media (max-width:580px){
+  .paper-footer{flex-wrap:wrap}
+  .paper-footer .progress-track{flex:1 0 100%;order:-1}
+  .paper-actions{margin-left:auto}
+  .paper-actions .button{min-height:40px}
+}
