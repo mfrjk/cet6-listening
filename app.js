@@ -49,6 +49,63 @@
   const correctCount = () => data.papers.reduce((sum, item) => sum + Object.values(recordFor(item.id).completed || {}).reduce((n, entry) => n + (entry.score || 0), 0), 0);
 
   function persist() { localStorage.setItem(storageKey, JSON.stringify(saved)); }
+
+  function exportProgressData() {
+    const payload = {
+      format: "cet6-listening-progress",
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      data: saved
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const stamp = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = "cet6-listening-progress-" + stamp + ".json";
+    document.body.append(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  function restoreProgressFile(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const payload = JSON.parse(String(reader.result || ""));
+        if (!payload || payload.format !== "cet6-listening-progress" || payload.version !== 1 || !payload.data || typeof payload.data !== "object" || Array.isArray(payload.data)) {
+          throw new Error("invalid-format");
+        }
+        const knownPaperIds = new Set(data.papers.map((item) => item.id));
+        const imported = {};
+        Object.entries(payload.data).forEach(([paperId, record]) => {
+          if (!knownPaperIds.has(paperId) || !record || typeof record !== "object" || Array.isArray(record)) return;
+          const completed = record.completed && typeof record.completed === "object" && !Array.isArray(record.completed) ? record.completed : {};
+          const deletedWrong = Array.isArray(record.deletedWrong) ? record.deletedWrong.filter((key) => typeof key === "string") : [];
+          const best = Number.isFinite(Number(record.best)) ? Number(record.best) : 0;
+          imported[paperId] = { completed, deletedWrong, best };
+        });
+        if (Object.keys(payload.data).length && !Object.keys(imported).length) {
+          throw new Error("no-known-papers");
+        }
+        if (!window.confirm("\u6062\u590d\u6570\u636e\u4f1a\u8986\u76d6\u5f53\u524d\u8fdb\u5ea6\uff0c\u786e\u5b9a\u8981\u7ee7\u7eed\u5417\uff1f")) return;
+        Object.keys(saved).forEach((key) => delete saved[key]);
+        Object.assign(saved, imported);
+        state.answers = {};
+        state.submitted = false;
+        state.showTranscript = false;
+        persist();
+        render();
+        window.alert("\u6570\u636e\u6062\u590d\u6210\u529f\uff01");
+      } catch (error) {
+        window.alert("\u6062\u590d\u5931\u8d25\uff1a\u8bf7\u9009\u62e9\u672c\u7f51\u7ad9\u5bfc\u51fa\u7684 JSON \u6587\u4ef6\u3002");
+      }
+    };
+    reader.onerror = () => window.alert("\u65e0\u6cd5\u8bfb\u53d6\u6570\u636e\u6587\u4ef6\u3002");
+    reader.readAsText(file);
+  }
+
   function closeWrongMenu() { document.querySelector(".wrong-context-menu")?.remove(); }
   function deleteWrongItem(paperId, taskId, questionNumber) {
     if (!saved[paperId]) saved[paperId] = { completed: {}, best: 0 };
@@ -89,7 +146,7 @@
     return `<header class="topbar">
       <button class="brand" data-action="home" aria-label="返回试卷列表"><span class="brand-mark">L</span><span class="brand-name">听力自习室<small>CET-6 LISTENING LAB</small></span></button>
       ${nav(active)}
-      <div class="top-actions"><span class="source-label">${esc(context || "陈宇昂的专属听力空间")}</span><span class="profile-name">陈宇昂</span><span class="brand-mark profile-mark" style="width:32px;height:32px;border-radius:50%;font-size:14px">陈</span></div>
+      <div class="top-actions"><div class="data-tools" aria-label="\u4e2a\u4eba\u6570\u636e\u5de5\u5177"><button class="data-tool data-export" type="button" data-action="export-data" title="\u4e0b\u8f7d\u7ec3\u4e60\u8fdb\u5ea6\u5907\u4efd">\u5bfc\u51fa\u6570\u636e</button><button class="data-tool data-restore" type="button" data-action="restore-data" title="\u4ece JSON \u6587\u4ef6\u6062\u590d\u7ec3\u4e60\u8fdb\u5ea6">\u6062\u590d\u6570\u636e</button><input class="data-restore-input" type="file" accept="application/json,.json" data-restore-file aria-label="\u9009\u62e9\u7ec3\u4e60\u6570\u636e\u6587\u4ef6" hidden></div><span class="source-label">${esc(context || "陈宇昂的专属听力空间")}</span><span class="profile-name">陈宇昂</span><span class="brand-mark profile-mark" style="width:32px;height:32px;border-radius:50%;font-size:14px">陈</span></div>
     </header>`;
   }
 
@@ -287,6 +344,13 @@
       const submit = app.querySelector('[data-action="submit-mock"]');
       if (submit && !state.mock.submitted) submit.disabled = mockAnswersCount() < mockTotalQuestions();
     }
+  });
+  app.addEventListener("change", (event) => {
+    const input = event.target.closest("[data-restore-file]");
+    if (!input || !input.files?.[0]) return;
+    const file = input.files[0];
+    input.value = "";
+    restoreProgressFile(file);
   });
   function expandToWord(range) {
     if (range.startContainer !== range.endContainer || range.startContainer.nodeType !== 3) return range;
@@ -703,6 +767,11 @@
     if (!event.target.closest('[data-action="toggle-transcript"]')) return;
     state.showTranscript = !state.showTranscript;
     render();
+  });
+  app.addEventListener("click", (event) => {
+    const action = event.target.closest("[data-action]")?.dataset.action;
+    if (action === "export-data") exportProgressData();
+    if (action === "restore-data") app.querySelector("[data-restore-file]")?.click();
   });
   render();
 })();
