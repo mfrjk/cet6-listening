@@ -208,3 +208,15 @@ body{background:radial-gradient(circle at 8% 0%,rgba(216,248,244,.72),transparen
 @media(max-width:380px){
   .data-tool{padding:8px 5px;font-size:10px}
 }
+
+/* Mobile navigation keeps every desktop destination reachable */
+@media(max-width:580px){
+  .topbar{height:auto;min-height:62px;flex-wrap:wrap;align-items:center;row-gap:6px;padding:10px 14px 8px}
+  .brand{flex:1;min-width:0}
+  .top-actions{flex:0 0 auto}
+  .topnav{display:flex;order:3;width:100%;gap:4px;padding:6px 0 0;border-top:1px solid var(--line);justify-content:stretch}
+  .nav-link{flex:1;min-height:40px;padding:8px 4px;font-size:11px}
+}
+@media(max-width:380px){
+  .nav-link{padding:8px 2px;font-size:10px}
+}

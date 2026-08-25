@@ -773,5 +773,17 @@
     if (action === "export-data") exportProgressData();
     if (action === "restore-data") app.querySelector("[data-restore-file]")?.click();
   });
+  app.addEventListener("touchend", (event) => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || !selection.toString().trim()) return;
+    const anchor = selection.anchorNode;
+    const element = anchor?.nodeType === 1 ? anchor : anchor?.parentElement;
+    if (!element?.closest?.(".option")) return;
+    if (markOptionSelection(selection)) {
+      event.preventDefault();
+      state.suppressOptionClick = true;
+    }
+  }, { passive: false });
+
   render();
 })();
