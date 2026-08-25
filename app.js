@@ -35,6 +35,7 @@
   let cloudSaveTimer = 0;
   let cloudSaveInFlight = false;
   let cloudSaveQueued = false;
+  let cloudWritebackFingerprint = "";
   let lastPersistedJson = "";
   let mockAudioAbortController = null;
 
@@ -129,8 +130,10 @@
     try {
       await sync.saveProgress(payload);
       if (state.cloudUser?.uid === user.uid && state.cloudConnectToken === connectionToken) {
-        state.cloudStatus = "synced";
-        decorateCloudUi();
+        if (state.cloudStatus !== "synced") {
+          state.cloudStatus = "synced";
+          decorateCloudUi();
+        }
       }
     } catch (error) {
       if (state.cloudUser?.uid === user.uid && state.cloudConnectToken === connectionToken) {
@@ -150,8 +153,10 @@
     const sync = window.CET_FIREBASE_SYNC;
     if (!state.cloudUser || !sync?.saveProgress) return;
     cloudSaveQueued = true;
-    state.cloudStatus = "syncing";
-    decorateCloudUi();
+    if (state.cloudStatus !== "syncing") {
+      state.cloudStatus = "syncing";
+      decorateCloudUi();
+    }
     if (cloudSaveTimer) window.clearTimeout(cloudSaveTimer);
     cloudSaveTimer = window.setTimeout(flushCloudSave, 650);
   }
@@ -388,11 +393,17 @@
     }
     // If the merge contains newer local data, write that merged result back once.
     // The stable comparison prevents the watch callback from creating a loop.
-    if (remoteJson !== after) queueCloudSave();
+    if (remoteJson !== after && cloudWritebackFingerprint !== remoteJson) {
+      cloudWritebackFingerprint = remoteJson;
+      queueCloudSave();
+    }
   }
 
   async function connectCloudUser(user) {
-    if (state.cloudUser?.uid !== user?.uid) cancelQueuedCloudSave();
+    if (state.cloudUser?.uid !== user?.uid) {
+      cancelQueuedCloudSave();
+      cloudWritebackFingerprint = "";
+    }
     const connectionToken = (state.cloudConnectToken || 0) + 1;
     state.cloudConnectToken = connectionToken;
     if (state.cloudWatchStop) {
