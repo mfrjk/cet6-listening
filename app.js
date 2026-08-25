@@ -20,6 +20,7 @@
     optionDragging: false,
     showTranscript: false,
     wrongGroup: null,
+    wrongReturn: null,
     cloudUser: null,
     cloudStatus: "local",
     cloudBound: false,
@@ -531,7 +532,7 @@
     const answers = currentAnswers();
     const result = state.submitted ? recordFor(item.id).completed?.[current.id] : null;
     const selectedCount = Object.keys(answers).length;
-    return `${header("practice", `${item.title} · 练习中`)}<main class="practice-layout">${sidePapers()}<section class="practice-main"><div class="practice-heading"><div><div class="eyebrow" style="color:var(--teal)">LISTENING PRACTICE / ${esc(item.title)}</div><h1>${esc(current.title)}</h1><p>先完整听一遍，再选择你认为正确的答案。</p></div><div class="task-pager"><button class="button light" data-action="previous" ${state.taskIndex === 0 ? "disabled" : ""}>上一组</button><strong>${state.taskIndex + 1}</strong><span>/ ${item.tasks.length}</span><button class="button light" data-action="next" ${state.taskIndex === item.tasks.length - 1 ? "disabled" : ""}>下一组</button></div></div><div class="audio-card"><div class="audio-card-top"><div><div class="audio-label">NOW PLAYING · ${esc(current.section)}</div><h2>Questions ${current.questions[0]?.number || ""} to ${current.questions.at(-1)?.number || ""}</h2><p>${esc(current.context)}</p></div><div class="audio-card-tools"><span class="audio-icon">◖◗</span><button class="button audio-clear" type="button" data-action="clear-task" data-clear-task="${esc(current.id)}" title="清除本段对话的作答、成绩和错题记录">清除本段选择</button></div></div><audio id="audio-player" controls preload="metadata" src="${esc(current.audio)}"></audio><button type="button" class="button transcript-quick-toggle" data-action="toggle-transcript" aria-controls="transcript-current">显示 / 隐藏听力原文</button></div><section class="question-panel"><div class="question-panel-head"><div><h2>选择题</h2><span>已选择 ${selectedCount} / ${current.questions.length}</span></div>${result ? `<span class="score-pill">本组得分 ${result.score}/${result.total}</span>` : "<span>提交后显示答案</span>"}</div>${current.questions.map((question) => questionTemplate(question, answers)).join("")}<div class="question-actions"><span class="hint">${state.submitted ? "点击下方“听力原文”可回到当前听力段落。" : "每组听力可以反复播放，提交后仍可继续下一组。"}</span><div class="action-group"><button class="button ghost" data-action="reset-task">清空选择</button><button class="button primary" data-action="submit-task">${state.submitted ? "重新提交本组" : "提交本组答案"}</button></div></div>${(state.submitted || state.showTranscript) ? transcriptTemplate(current, "transcript-current") : ""}</section></section></main>`;
+    return `${header("practice", `${item.title} · 练习中`)}<main class="practice-layout">${sidePapers()}<section class="practice-main"><div class="practice-heading"><div>${state.wrongReturn ? '<button class=practice-return type=button data-action=return-wrong>返回错题回顾</button>' : ''}<div class="eyebrow" style="color:var(--teal)">LISTENING PRACTICE / ${esc(item.title)}</div><h1>${esc(current.title)}</h1><p>先完整听一遍，再选择你认为正确的答案。</p></div><div class="task-pager"><button class="button light" data-action="previous" ${state.taskIndex === 0 ? "disabled" : ""}>上一组</button><strong>${state.taskIndex + 1}</strong><span>/ ${item.tasks.length}</span><button class="button light" data-action="next" ${state.taskIndex === item.tasks.length - 1 ? "disabled" : ""}>下一组</button></div></div><div class="audio-card"><div class="audio-card-top"><div><div class="audio-label">NOW PLAYING · ${esc(current.section)}</div><h2>Questions ${current.questions[0]?.number || ""} to ${current.questions.at(-1)?.number || ""}</h2><p>${esc(current.context)}</p></div><div class="audio-card-tools"><span class="audio-icon">◖◗</span><button class="button audio-clear" type="button" data-action="clear-task" data-clear-task="${esc(current.id)}" title="清除本段对话的作答、成绩和错题记录">清除本段选择</button></div></div><audio id="audio-player" controls preload="metadata" src="${esc(current.audio)}"></audio><button type="button" class="button transcript-quick-toggle" data-action="toggle-transcript" aria-controls="transcript-current">显示 / 隐藏听力原文</button></div><section class="question-panel"><div class="question-panel-head"><div><h2>选择题</h2><span>已选择 ${selectedCount} / ${current.questions.length}</span></div>${result ? `<span class="score-pill">本组得分 ${result.score}/${result.total}</span>` : "<span>提交后显示答案</span>"}</div>${current.questions.map((question) => questionTemplate(question, answers)).join("")}<div class="question-actions"><span class="hint">${state.submitted ? "点击下方“听力原文”可回到当前听力段落。" : "每组听力可以反复播放，提交后仍可继续下一组。"}</span><div class="action-group"><button class="button ghost" data-action="reset-task">清空选择</button><button class="button primary" data-action="submit-task">${state.submitted ? "重新提交本组" : "提交本组答案"}</button></div></div>${(state.submitted || state.showTranscript) ? transcriptTemplate(current, "transcript-current") : ""}</section></section></main>`;
   }
   function questionTemplate(question, answers) {
     const selected = answers[question.number];
@@ -745,13 +746,14 @@
       '</div></main>';
   }
 
-  function openPaper(paperId, taskId = null, focusQuestion = null, transcript = false) {
+  function openPaper(paperId, taskId = null, focusQuestion = null, transcript = false, wrongReturn = null) {
     state.paperId = paperId;
     state.taskIndex = taskId ? paper().tasks.findIndex((item) => String(item.id) === String(taskId)) : 0;
     if (state.taskIndex < 0) state.taskIndex = 0;
     state.submitted = Boolean(recordFor(paperId).completed?.[paper().tasks[state.taskIndex].id]);
     state.focusQuestion = focusQuestion ? Number(focusQuestion) : null;
     state.focusTranscript = transcript;
+    state.wrongReturn = wrongReturn ? { ...wrongReturn } : null;
     state.screen = "practice";
     render();
     if (state.focusQuestion || state.focusTranscript) setTimeout(focusCurrent, 80);
@@ -869,7 +871,7 @@
     const sidePaper = event.target.closest("[data-side-paper]");
     if (sidePaper) return openPaper(sidePaper.dataset.sidePaper);
     const wrongButton = event.target.closest("[data-wrong-paper]");
-    if (wrongButton) return openPaper(wrongButton.dataset.wrongPaper, wrongButton.dataset.wrongTask, wrongButton.dataset.wrongQuestion);
+    if (wrongButton) return openPaper(wrongButton.dataset.wrongPaper, wrongButton.dataset.wrongTask, wrongButton.dataset.wrongQuestion, false, state.wrongGroup ? { ...state.wrongGroup } : null);
     const actionTarget = event.target.closest("[data-action]");
     const action = actionTarget?.dataset.action;
     if (!action) return;
@@ -878,6 +880,7 @@
     if (action === "mock-new") createMock();
     if (action === "open-wrong") {
       state.wrongGroup = null;
+      state.wrongReturn = null;
       state.screen = "wrong";
       render();
     }
@@ -892,6 +895,14 @@
     }
     if (action === "wrong-back") {
       state.wrongGroup = null;
+      render();
+      return;
+    }
+    if (action === "return-wrong") {
+      const returnGroup = state.wrongReturn;
+      state.wrongReturn = null;
+      state.wrongGroup = returnGroup ? { ...returnGroup } : null;
+      state.screen = "wrong";
       render();
       return;
     }

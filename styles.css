@@ -293,3 +293,6 @@ body{background:radial-gradient(circle at 8% 0%,rgba(216,248,244,.72),transparen
   .wrong-set-count{font-size:11px}
   .wrong-item-card{align-items:flex-start}
 }
+
+.practice-return{display:inline-flex;align-items:center;margin-bottom:10px;padding:7px 11px;border:1px solid #b7e2dc;border-radius:8px;background:#eefaf8;color:var(--blue);font-size:11px;font-weight:850;cursor:pointer;transition:.15s ease}
+.practice-return:hover{border-color:#7ccfc5;background:#e1f7f2;color:var(--teal);transform:translateY(-1px)}
