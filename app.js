@@ -38,6 +38,7 @@
   const mockTasks = () => allTasks().filter((item) => item.audioScope !== "whole-paper");
   const allCompleted = () => data.papers.reduce((sum, item) => sum + completedCount(item), 0);
   const wrongKey = (taskId, questionNumber) => `${taskId}::${questionNumber}`;
+  const mockWrongStorageKey = "__mock-wrong-v1";
   const wrongItems = () => data.papers.flatMap((item) => item.tasks.flatMap((current) => {
     const record = recordFor(item.id);
     const result = record.completed?.[current.id];
@@ -50,9 +51,33 @@
       taskId: current.id,
       taskTitle: current.title,
       question,
-      chosen: answers[question.number] || "未作答"
+      chosen: answers[question.number] || "未作答",
+      submittedAt: result.at
     }));
   }));
+  const mockWrongItems = () => {
+    const sets = Array.isArray(saved[mockWrongStorageKey]) ? saved[mockWrongStorageKey] : [];
+    return sets.flatMap((set) => {
+      const deleted = new Set(set.deletedIds || []);
+      return (set.items || []).filter((item) => !deleted.has(item.id)).map((item) => ({
+        ...item,
+        setId: set.id,
+        submittedAt: set.submittedAt
+      }));
+    });
+  };
+  const wrongTotal = () => wrongItems().length + mockWrongItems().length;
+  const formatReviewTime = (timestamp) => {
+    const date = new Date(Number(timestamp));
+    if (!Number.isFinite(date.getTime())) return "时间未知";
+    return date.toLocaleString("zh-CN", {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  };
   const correctCount = () => data.papers.reduce((sum, item) => sum + Object.values(recordFor(item.id).completed || {}).reduce((n, entry) => n + (entry.score || 0), 0), 0);
 
   function persist(options = {}) {
@@ -153,9 +178,30 @@
     return JSON.parse(JSON.stringify(value || {}));
   }
 
+  function mergeMockWrongSets(localSets, remoteSets) {
+    const byId = new Map();
+    [...(Array.isArray(localSets) ? localSets : []), ...(Array.isArray(remoteSets) ? remoteSets : [])].forEach((set) => {
+      if (!set || typeof set !== "object" || !set.id) return;
+      const incoming = cloneCloudData(set);
+      const existing = byId.get(set.id);
+      if (!existing) {
+        byId.set(set.id, incoming);
+        return;
+      }
+      const latest = Number(incoming.submittedAt) >= Number(existing.submittedAt) ? incoming : existing;
+      byId.set(set.id, {
+        ...latest,
+        deletedIds: [...new Set([...(existing.deletedIds || []), ...(incoming.deletedIds || [])])],
+        items: Array.isArray(latest.items) ? latest.items : []
+      });
+    });
+    return [...byId.values()].sort((a, b) => Number(b.submittedAt) - Number(a.submittedAt));
+  }
+
   function mergeCloudProgress(localData, remoteData) {
     const merged = cloneCloudData(localData);
     Object.entries(remoteData || {}).forEach(([paperId, remoteRecord]) => {
+      if (paperId === mockWrongStorageKey) return;
       if (!remoteRecord || typeof remoteRecord !== "object" || Array.isArray(remoteRecord)) return;
       const localRecord = merged[paperId] || {};
       const paperClearedAt = Math.max(Number(localRecord.clearedAt) || 0, Number(remoteRecord.clearedAt) || 0);
@@ -207,6 +253,9 @@
       else delete mergedRecord.clearedTasks;
       merged[paperId] = mergedRecord;
     });
+    const mergedMockWrong = mergeMockWrongSets(localData?.[mockWrongStorageKey], remoteData?.[mockWrongStorageKey]);
+    if (mergedMockWrong.length) merged[mockWrongStorageKey] = mergedMockWrong;
+    else delete merged[mockWrongStorageKey];
     return merged;
   }
 
@@ -321,6 +370,10 @@
         const knownPaperIds = new Set(data.papers.map((item) => item.id));
         const imported = {};
         Object.entries(payload.data).forEach(([paperId, record]) => {
+          if (paperId === mockWrongStorageKey) {
+            imported[mockWrongStorageKey] = mergeMockWrongSets([], record);
+            return;
+          }
           if (!knownPaperIds.has(paperId) || !record || typeof record !== "object" || Array.isArray(record)) return;
           const completed = record.completed && typeof record.completed === "object" && !Array.isArray(record.completed) ? record.completed : {};
           const deletedWrong = Array.isArray(record.deletedWrong) ? record.deletedWrong.filter((key) => typeof key === "string") : [];
@@ -395,18 +448,32 @@
     closeWrongMenu();
     render();
   }
+  function deleteMockWrongItem(setId, itemId) {
+    const sets = Array.isArray(saved[mockWrongStorageKey]) ? saved[mockWrongStorageKey] : [];
+    const target = sets.find((set) => set.id === setId);
+    if (!target) return;
+    target.deletedIds = [...new Set([...(target.deletedIds || []), itemId])];
+    saved[mockWrongStorageKey] = sets;
+    persist();
+    closeWrongMenu();
+    render();
+  }
   function showWrongMenu(event, card) {
     event.preventDefault();
     closeWrongMenu();
     const menu = document.createElement("div");
     menu.className = "wrong-context-menu";
     menu.setAttribute("role", "menu");
-    menu.innerHTML = `<button type="button" role="menuitem"><span>✦</span>删除这道错题</button>`;
-    menu.style.left = `${Math.min(event.clientX, window.innerWidth - 176)}px`;
-    menu.style.top = `${Math.min(event.clientY, window.innerHeight - 54)}px`;
+    menu.innerHTML = '<button type="button" role="menuitem"><span>✓</span> 删除这道错题</button>';
+    menu.style.left = Math.min(event.clientX, window.innerWidth - 176) + "px";
+    menu.style.top = Math.min(event.clientY, window.innerHeight - 54) + "px";
     menu.querySelector("button").addEventListener("click", (clickEvent) => {
       clickEvent.stopPropagation();
-      deleteWrongItem(card.dataset.wrongPaper, card.dataset.wrongTask, card.dataset.wrongQuestion);
+      if (card.dataset.mockWrongId) {
+        deleteMockWrongItem(card.dataset.mockSetId, card.dataset.mockWrongId);
+      } else {
+        deleteWrongItem(card.dataset.wrongPaper, card.dataset.wrongTask, card.dataset.wrongQuestion);
+      }
     });
     document.body.append(menu);
   }
@@ -419,7 +486,7 @@
     return `<nav class="topnav">
       <button class="nav-link ${active === "practice" ? "active" : ""}" data-action="home">真题练习</button>
       <button class="nav-link ${active === "mock" ? "active" : ""}" data-action="open-mock">模拟练习</button>
-      <button class="nav-link ${active === "wrong" ? "active" : ""}" data-action="open-wrong">错题回顾${wrongItems().length ? ` · ${wrongItems().length}` : ""}</button>
+      <button class="nav-link ${active === "wrong" ? "active" : ""}" data-action="open-wrong">错题回顾${wrongTotal() ? ` · ${wrongTotal()}` : ""}</button>
     </nav>`;
   }
   function header(active = "practice", context = "") {
@@ -534,6 +601,39 @@
     const selected = answers[id];
     return `<article class="question" data-mock-question="${id}"><div class="question-stem"><span class="question-no">${question.number}</span><p>${esc(question.stem)}</p></div><div class="options">${Object.entries(question.options).map(([letter, text]) => { const chosen = selected === letter; const cls = state.mock.submitted ? (letter === question.answer ? "is-correct" : chosen ? "is-wrong" : "") : chosen ? "is-selected" : ""; return `<label class="option ${cls}"><input type="radio" name="mock-${id}" value="${letter}" data-mock-answer="${id}" ${chosen ? "checked" : ""}><span><b>${letter}.</b> ${esc(text)}</span></label>`; }).join("")}</div>${state.mock.submitted ? `<div class="result-line ${selected === question.answer ? "good" : "bad"}">${selected === question.answer ? "✓ 回答正确" : `✕ 正确答案是 ${question.answer}${selected ? `，你的选择是 ${selected}` : "，本题未作答"}`}</div>` : ""}</article>`;
   }
+  function recordMockWrongAnswers(mock, submittedAt) {
+    const items = [];
+    for (const group of mock.groups) {
+      for (const question of group.questions) {
+        const selected = mock.answers[group.mockId + "-" + question.number];
+        if (selected === question.answer) continue;
+        items.push({
+          id: mock.id + "-" + group.groupNumber + "-" + question.number,
+          sourcePaper: group.sourcePaper,
+          taskTitle: group.title,
+          section: group.section,
+          groupNumber: group.groupNumber,
+          questionNumber: question.number,
+          stem: question.stem,
+          answer: question.answer,
+          chosen: selected || "未作答"
+        });
+      }
+    }
+    const previous = Array.isArray(saved[mockWrongStorageKey]) ? saved[mockWrongStorageKey] : [];
+    const next = previous.filter((set) => set.id !== mock.id);
+    if (items.length) {
+      next.push({
+        id: mock.id,
+        source: "模拟组卷",
+        submittedAt,
+        items,
+        deletedIds: []
+      });
+    }
+    saved[mockWrongStorageKey] = next;
+  }
+
   function submitMock() {
     const mock = state.mock;
     const bySection = {};
@@ -552,14 +652,43 @@
     mock.score = score;
     mock.correct = correct;
     mock.bySection = bySection;
+    const submittedAt = Date.now();
+    recordMockWrongAnswers(mock, submittedAt);
+    mock.submittedAt = submittedAt;
     mock.submitted = true;
+    persist();
     render();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function realWrongCardTemplate(item) {
+    return '<button class="wrong-card" data-wrong-paper="' + esc(item.paperId) + '" data-wrong-task="' + esc(item.taskId) + '" data-wrong-question="' + esc(item.question.number) + '">' +
+      '<div><div class="wrong-source-tag">真题练习</div><h3>' + esc(item.question.number) + '. ' + esc(item.question.stem) + '</h3><p>' + esc(item.paperTitle) + ' · ' + esc(item.taskTitle) + '</p></div>' +
+      '<span class="wrong-meta"><span class="wrong-answer">你的答案：' + esc(item.chosen) + '</span><span class="wrong-time">练习时间：' + esc(formatReviewTime(item.submittedAt)) + '</span><span>正确：' + esc(item.question.answer) + ' →</span></span>' +
+      '</button>';
+  }
+  function mockWrongCardTemplate(item) {
+    return '<article class="wrong-card mock-wrong-card" data-mock-set-id="' + esc(item.setId) + '" data-mock-wrong-id="' + esc(item.id) + '">' +
+      '<div><div class="wrong-source-tag mock">模拟组卷 · 第 ' + esc(item.groupNumber) + ' 组</div><h3>' + esc(item.questionNumber) + '. ' + esc(item.stem) + '</h3><p>' + esc(item.sourcePaper) + ' · ' + esc(item.taskTitle) + ' · ' + esc(mockSectionName(item.section)) + '</p></div>' +
+      '<span class="wrong-meta"><span class="wrong-answer">你的答案：' + esc(item.chosen) + '</span><span class="wrong-time">组卷时间：' + esc(formatReviewTime(item.submittedAt)) + '</span><span>正确：' + esc(item.answer) + '</span></span>' +
+      '</article>';
+  }
+  function wrongSectionTemplate(title, subtitle, items, cards) {
+    return '<section class="wrong-section"><div class="wrong-section-head"><div><div class="eyebrow" style="color:var(--teal)">' + esc(subtitle) + '</div><h2>' + esc(title) + '</h2></div><strong>' + items.length + ' 道</strong></div>' +
+      (items.length ? cards : '<div class="empty">这一部分暂时没有错题</div>') +
+      '</section>';
+  }
   function wrongTemplate() {
-    const items = wrongItems();
-    return `${header("wrong", "错题回顾")}<main class="content"><div class="wrong-header"><div class="eyebrow" style="color:var(--teal)">REVIEW YOUR MISTAKES</div><h1>错题回顾</h1><p>${items.length ? `共 ${items.length} 道错题，点击题目回到对应听力组；右键或长按可删除单道错题。` : "完成并提交真题练习后，错题会自动出现在这里。"}</p></div>${items.length ? items.map((item) => `<button class="wrong-card" data-wrong-paper="${esc(item.paperId)}" data-wrong-task="${item.taskId}" data-wrong-question="${item.question.number}"><div><h3>${esc(item.question.number)}. ${esc(item.question.stem)}</h3><p>${esc(item.paperTitle)} · ${esc(item.taskTitle)}</p></div><span class="wrong-meta"><span class="wrong-answer">你的答案：${esc(item.chosen)}</span><span>正确：${esc(item.question.answer)} →</span></span></button>`).join("") : '<div class="empty">还没有错题记录</div>'}</main>`;
+    const realItems = wrongItems();
+    const mockItems = mockWrongItems();
+    const total = realItems.length + mockItems.length;
+    return header("wrong", "错题回顾") +
+      '<main class="content"><div class="wrong-header"><div class="eyebrow" style="color:var(--teal)">REVIEW YOUR MISTAKES</div><h1>错题回顾</h1><p>' +
+      (total ? '共 ' + total + ' 道错题；真题练习和模拟组卷分开记录，右键或长按可删除单道错题。' : '完成真题练习或模拟组卷并提交后，错题会自动出现在这里。') +
+      '</p></div><div class="wrong-sections">' +
+      wrongSectionTemplate("真题练习错题", "REAL PAPER PRACTICE", realItems, realItems.map(realWrongCardTemplate).join("")) +
+      wrongSectionTemplate("模拟组卷错题", "RANDOM MOCK REVIEW", mockItems, mockItems.map(mockWrongCardTemplate).join("")) +
+      '</div></main>';
   }
 
   function openPaper(paperId, taskId = null, focusQuestion = null, transcript = false) {
@@ -770,17 +899,18 @@
       ...randomPickTotal(source.filter((item) => item.section === "Sec C"), 10)
     ];
     let number = 1;
+    const createdAt = Date.now();
     const groups = selected.map((item, index) => {
       const sourcePaper = data.papers.find((paperItem) => paperItem.tasks.some((taskItem) => taskItem.id === item.id));
       return {
         ...item,
-        mockId: `${item.id}-${Date.now()}-${index}`,
+        mockId: `${item.id}-${createdAt}-${index}`,
         sourcePaper: sourcePaper?.title || "真题",
         groupNumber: index + 1,
         questions: item.questions.map((question) => ({ ...question, number: number++ }))
       };
     });
-    state.mock = { groups, answers: {}, submitted: false, started: false, audioUrl: "", audioSegments: [], audioMode: "combined", audioStatus: "" , score: 0, correct: 0, bySection: {} };
+    state.mock = { id: `mock-${createdAt}`, createdAt, groups, answers: {}, submitted: false, started: false, audioUrl: "", audioSegments: [], audioMode: "combined", audioStatus: "" , score: 0, correct: 0, bySection: {} };
     state.screen = "mock-setup";
     render();
   }

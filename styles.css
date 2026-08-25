@@ -251,3 +251,21 @@ body{background:radial-gradient(circle at 8% 0%,rgba(216,248,244,.72),transparen
   .audio-card-tools{align-items:flex-end;gap:7px}
   .audio-clear{padding:7px 9px!important;font-size:10px!important}
 }
+
+
+.wrong-sections{display:grid;gap:22px}
+.wrong-section{padding:20px 22px;border:1px solid var(--line);border-radius:16px;background:rgba(255,255,255,.72)}
+.wrong-section-head{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-bottom:12px}
+.wrong-section-head h2{margin:5px 0 0;font-size:20px;color:var(--blue-deep)}
+.wrong-section-head>strong{color:var(--teal);font-size:13px;white-space:nowrap}
+.wrong-source-tag{display:inline-flex;align-items:center;margin-bottom:6px;padding:4px 8px;border-radius:6px;background:#e7f7f3;color:#157f78;font-size:10px;font-weight:800;letter-spacing:.04em}
+.wrong-source-tag.mock{background:#fff4df;color:#b27327}
+.wrong-card .wrong-meta{flex-wrap:wrap;justify-content:flex-end}
+.wrong-time{color:var(--blue)!important}
+.mock-wrong-card{cursor:default}
+@media(max-width:580px){
+  .wrong-section{padding:15px 12px}
+  .wrong-section-head h2{font-size:18px}
+  .wrong-card .wrong-meta{justify-content:space-between}
+  .wrong-source-tag{font-size:10px}
+}
