@@ -117,8 +117,9 @@
       const errorNode = form.querySelector(".cloud-auth-error");
       const sync = window.CET_FIREBASE_SYNC;
       if (!sync) {
-        errorNode.textContent = "\u4e91\u7aef\u6a21\u5757\u5c1a\u672a\u52a0\u8f7d\uff0c\u8bf7\u5237\u65b0\u9875\u9762\u540e\u91cd\u8bd5\u3002";
+        errorNode.textContent = "云端模块正在加载，请稍候再点登录。";
         errorNode.hidden = false;
+        submit.disabled = false;
         return;
       }
       submit.disabled = true;

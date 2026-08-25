@@ -1,11 +1,11 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
+import { initializeApp } from "./vendor/firebase/firebase-app.js";
 import {
   getAuth,
   onAuthStateChanged as listenAuthState,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut
-} from "https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js";
+} from "./vendor/firebase/firebase-auth.js";
 import {
   getDatabase,
   ref,
@@ -13,7 +13,7 @@ import {
   set,
   onValue,
   off
-} from "https://www.gstatic.com/firebasejs/12.17.1/firebase-database.js";
+} from "./vendor/firebase/firebase-database.js";
 
 const config = window.CET6_FIREBASE_CONFIG;
 const authListeners = new Set();
