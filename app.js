@@ -872,6 +872,22 @@
     const startOption = optionFor(range.startContainer);
     const endOption = optionFor(range.endContainer);
     if (!startOption || startOption !== endOption) return false;
+
+    const markFor = (node) => {
+      const element = node.nodeType === 1 ? node : node.parentElement;
+      return element?.closest('.user-highlight');
+    };
+    const startMark = markFor(range.startContainer);
+    const endMark = markFor(range.endContainer);
+    if (startMark && startMark === endMark) {
+      const parent = startMark.parentNode;
+      if (parent) {
+        while (startMark.firstChild) parent.insertBefore(startMark.firstChild, startMark);
+        startMark.remove();
+        if (typeof selection.removeAllRanges === 'function') selection.removeAllRanges();
+        return true;
+      }
+    }
     const wordRange = expandToWord(range);
     const mark = document.createElement("mark");
     mark.className = "user-highlight";
