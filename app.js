@@ -725,12 +725,14 @@
     return `<section class="mock-group" id="mock-group-${group.groupNumber}"><div class="mock-group-head"><div><p>第 ${group.groupNumber} 组 · ${mockSectionName(group.section)}</p><h2>${esc(group.sourcePaper)} / ${esc(group.title)}</h2></div><span class="score-pill">每题 ${mockWeight(group.section)} 分</span></div><div class="audio-card"><div class="audio-card-top"><div><div class="audio-label">MOCK AUDIO · ${esc(group.section)}</div><h2>Questions ${group.questions[0]?.number || ""} to ${group.questions.at(-1)?.number || ""}</h2><p>${esc(group.context)}</p></div><span class="audio-icon">◖◗</span></div><audio controls preload="metadata" data-mock-audio="${group.mockId}" src="${esc(group.audio)}"></audio></div><section class="question-panel"><div class="question-panel-head"><div><h2>${mockSectionName(group.section)}</h2><span>${group.questions.length} 道题 · 每题 ${mockWeight(group.section)} 分</span></div><span>${state.mock.submitted ? "已评分" : "请作答"}</span></div>${group.questions.map((question) => mockQuestionTemplate(question, group, answers)).join("")}</section>${state.mock.submitted ? transcriptTemplate(group, `mock-transcript-${group.groupNumber}`, true) : ""}</section>`;
   }
   function mockQuestionTemplate(question, group, answers) {
-    const id = `${group.mockId}-${question.number}`;
+    const id = group.mockId + "-" + question.number;
     const selected = answers[id];
     const showQuestions = state.mock.showQuestions !== false;
-    return `<article class="question" data-mock-question="${id}"><div class="question-stem"><span class="question-no">${question.number}</span><p class="${showQuestions ? "" : "mock-question-placeholder"}">${showQuestions ? esc(question.stem) : "\u9898\u76ee\u5df2\u9690\u85cf"}</p></div><div class="options">${Object.entries(question.options).map(([letter, text]) => { const chosen = selected === letter; const cls = state.mock.submitted ? (letter === question.answer ? "is-correct" : chosen ? "is-wrong" : "") : chosen ? "is-selected" : ""; return `<label class="option ${cls}" data-highlight-question="${question.number}" data-highlight-option="${letter}"><input type="radio" name="mock-${id}" value="${letter}" data-mock-answer="${id}" ${chosen ? "checked" : ""}><span><b>${letter}.</b> ${renderOptionText(text, getMockHighlightValues(id, letter))}</span></label>`; }).join("")}</div>${state.mock.submitted ? `<div class="result-line ${selected === question.answer ? "good" : "bad"}">${selected === question.answer ? "✓ 回答正确" : `✕ 正确答案是 ${question.answer}${selected ? `，你的选择是 ${selected}` : "，本题未作答"}`}</div>` : ""}</article>`;
+    const stem = showQuestions ? "<p>" + esc(question.stem) + "</p>" : "";
+    const stemClass = showQuestions ? "question-stem" : "question-stem mock-question-stem-hidden";
+    const result = state.mock.submitted ? '<div class="result-line ' + (selected === question.answer ? "good" : "bad") + '">' + (selected === question.answer ? "\u2713 \u56de\u7b54\u6b63\u786e" : "\u2715 \u6b63\u786e\u7b54\u6848\u662f " + esc(question.answer) + (selected ? "\uff0c\u4f60\u7684\u9009\u62e9\u662f " + esc(selected) : "\uff0c\u672c\u9898\u672a\u4f5c\u7b54")) + '</div>' : "";
+    return '<article class="question" data-mock-question="' + esc(id) + '"><div class="' + stemClass + '"><span class="question-no">' + esc(question.number) + '</span>' + stem + '</div><div class="options">' + Object.entries(question.options || {}).map(([letter, text]) => { const chosen = selected === letter; const cls = state.mock.submitted ? (letter === question.answer ? "is-correct" : chosen ? "is-wrong" : "") : chosen ? "is-selected" : ""; return '<label class="option ' + cls + '" data-highlight-question="' + esc(question.number) + '" data-highlight-option="' + esc(letter) + '"><input type="radio" name="mock-' + esc(id) + '" value="' + esc(letter) + '" data-mock-answer="' + esc(id) + '"' + (chosen ? " checked" : "") + '><span><b>' + esc(letter) + '.</b> ' + renderOptionText(text, getMockHighlightValues(id, letter)) + '</span></label>'; }).join('') + '</div>' + result + '</article>';
   }
-
   function recordMockWrongAnswers(mock, submittedAt) {
     const items = [];
     for (const group of mock.groups) {
@@ -855,20 +857,21 @@
 
 
   function mockHistoryQuestionTemplate(question, group, set) {
-    const id = group.mockId + '-' + question.number;
+    const id = group.mockId + "-" + question.number;
     const selected = set.answers?.[id];
     const wrongItem = (set.items || []).find((item) => item.groupNumber === group.groupNumber && Number(item.questionNumber) === Number(question.number));
-    const wrongAttrs = wrongItem ? ' mock-history-wrong-item data-mock-set-id=' + esc(set.id) + ' data-mock-wrong-id=' + esc(wrongItem.id) : '';
-    return '<article class=question' + wrongAttrs + ' data-mock-question=' + esc(id) + '><div class=question-stem><span class=question-no>' + esc(question.number) + '</span><p>' + esc(question.stem) + '</p></div><div class=options>' +
+    const wrongAttrs = wrongItem ? " mock-history-wrong-item data-mock-set-id=" + esc(set.id) + " data-mock-wrong-id=" + esc(wrongItem.id) : "";
+    return '<article class="question"' + wrongAttrs + ' data-mock-question="' + esc(id) + '"><div class="question-stem"><span class="question-no">' + esc(question.number) + '</span><p>' + esc(question.stem) + '</p></div><div class="options">' +
       Object.entries(question.options || {}).map(([letter, text]) => {
         const chosen = selected === letter;
-        const cls = letter === question.answer ? 'is-correct' : chosen ? 'is-wrong' : '';
-        return '<div class=option ' + cls + ' data-highlight-question=' + esc(question.number) + ' data-highlight-option=' + esc(letter) + '><span><b>' + esc(letter) + '.</b> ' + renderOptionText(text, getMockHighlightValues(id, letter, set)) + '</span></div>';
-      }).join('') +
-      '</div></article>';
+        const cls = letter === question.answer ? "is-correct" : chosen ? "is-wrong" : "";
+        return '<label class="option ' + cls + '" data-highlight-question="' + esc(question.number) + '" data-highlight-option="' + esc(letter) + '"><input type="radio" name="review-' + esc(id) + '" value="' + esc(letter) + '" disabled' + (chosen ? " checked" : "") + '><span><b>' + esc(letter) + '.</b> ' + renderOptionText(text, getMockHighlightValues(id, letter, set)) + '</span></label>';
+      }).join('') + '</div></article>';
   }
+
   function mockHistoryGroupTemplate(group, set) {
-    return '<section class=mock-history-group><div class=mock-group-head><div><p>第 ' + esc(group.groupNumber) + ' 组 · ' + esc(mockSectionName(group.section)) + '</p><h2>' + esc(group.sourcePaper || '真题') + ' / ' + esc(group.title) + '</h2></div><span class=score-pill>每题 ' + mockWeight(group.section) + ' 分</span></div><section class=question-panel><div class=question-panel-head><div><h2>' + esc(mockSectionName(group.section)) + '</h2><span>' + group.questions.length + ' 道题</span></div><span>已完成</span></div>' + group.questions.map((question) => mockHistoryQuestionTemplate(question, group, set)).join('') + '</section></section>';
+    const audio = group.audio ? '<div class="audio-card mock-history-audio"><div class="audio-card-top"><div><div class="audio-label">MOCK AUDIO \u00b7 \u542c\u529b\u97f3\u9891</div><h2>\u7b2c' + esc(group.groupNumber) + '\u7ec4\u97f3\u9891</h2><p>' + esc(group.context || "") + '</p></div><span class="audio-icon">▶</span></div><audio controls preload="metadata" src="' + esc(group.audio) + '"></audio></div>' : "";
+    return '<section class="mock-history-group"><div class="mock-group-head"><div><p>\u7b2c' + esc(group.groupNumber) + '\u7ec4 · ' + esc(mockSectionName(group.section)) + '</p><h2>' + esc(group.sourcePaper || "\u771f\u9898") + ' / ' + esc(group.title) + '</h2></div><span class="score-pill">\u6bcf\u9898 ' + mockWeight(group.section) + ' \u5206</span></div>' + audio + '<section class="question-panel"><div class="question-panel-head"><div><h2>' + esc(mockSectionName(group.section)) + '</h2><span>' + group.questions.length + ' \u9053\u9898</span></div><span>\u5df2\u5b8c\u6210</span></div>' + group.questions.map((question) => mockHistoryQuestionTemplate(question, group, set)).join('') + '</section></section>';
   }
   function mockHistoryDetailTemplate(group) {
     const set = group.history;
