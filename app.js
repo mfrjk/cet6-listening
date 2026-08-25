@@ -35,7 +35,8 @@
   let cloudSaveTimer = 0;
   let cloudSaveInFlight = false;
   let cloudSaveQueued = false;
-  let lastPersistedJson = localStorage.getItem(storageKey) || "{}";
+  let lastPersistedJson = "";
+  let mockAudioAbortController = null;
 
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
@@ -158,7 +159,7 @@
   function persist(options = {}) {
     // Local persistence remains immediate so a refresh does not lose a newly
     // selected answer or highlight. Cloud persistence is batched separately.
-    lastPersistedJson = JSON.stringify(saved);
+    lastPersistedJson = stableStringify(saved);
     localStorage.setItem(storageKey, lastPersistedJson);
     if (!options.skipCloud) queueCloudSave();
   }
@@ -243,6 +244,14 @@
   function cloneCloudData(value) {
     return JSON.parse(JSON.stringify(value || {}));
   }
+  function stableStringify(value) {
+    if (Array.isArray(value)) return "[" + value.map(stableStringify).join(",") + "]";
+    if (value && typeof value === "object") {
+      return "{" + Object.keys(value).sort().map((key) => JSON.stringify(key) + ":" + stableStringify(value[key])).join(",") + "}";
+    }
+    return JSON.stringify(value);
+  }
+  lastPersistedJson = stableStringify(saved);
 
   function mergeMockHighlights(...sources) {
     const merged = {};
@@ -361,24 +370,25 @@
   }
 
   function handleCloudRemoteData(remoteData) {
-    if (!state.cloudUser || !remoteData || typeof remoteData !== "object") return;
-    const remoteJson = JSON.stringify(remoteData);
-    // Firebase echoes our own write. Skip the expensive merge/stringify/render
-    // cycle when the remote snapshot is already the locally persisted state.
-    if (remoteJson === lastPersistedJson) return;
+    if (!state.cloudUser || !remoteData || typeof remoteData !== "object" || Array.isArray(remoteData)) return;
+    const remoteJson = stableStringify(remoteData);
+    const before = lastPersistedJson;
+    // Firebase echoes our own write. Skip the expensive merge/render cycle when
+    // the snapshot is already equal after normalizing object-key order.
+    if (remoteJson === before) return;
     const merged = mergeCloudProgress(saved, remoteData);
-    const after = JSON.stringify(merged);
-    if (after !== lastPersistedJson) {
+    const after = stableStringify(merged);
+    const changedLocally = after !== before;
+    if (changedLocally) {
       saved = merged;
       persist({ skipCloud: true });
       state.answers = {};
       state.submitted = false;
       render();
     }
-    // Only write back when the merge actually changed our local snapshot.
-    // Firebase may return the same values with a different object-key order;
-    // that is not a data change and must not create a sync feedback loop.
-    if (remoteJson !== after && after !== lastPersistedJson) queueCloudSave();
+    // If the merge contains newer local data, write that merged result back once.
+    // The stable comparison prevents the watch callback from creating a loop.
+    if (remoteJson !== after) queueCloudSave();
   }
 
   async function connectCloudUser(user) {
@@ -427,7 +437,7 @@
           return;
         }
         const nextData = nextPayload?.data;
-        if (nextData) handleCloudRemoteData(nextData);
+        handleCloudRemoteData(nextData && typeof nextData === "object" ? nextData : {});
       });
       render();
     } catch (error) {
@@ -659,7 +669,7 @@
     const answers = currentAnswers();
     const result = state.submitted ? recordFor(item.id).completed?.[current.id] : null;
     const selectedCount = Object.keys(answers).length;
-    return `${header("practice", `${item.title} · 练习中`)}<main class="practice-layout">${sidePapers()}<section class="practice-main"><div class="practice-heading"><div>${state.wrongReturn ? '<button class=practice-return type=button data-action=return-wrong>返回错题回顾</button>' : ''}<div class="eyebrow" style="color:var(--teal)">LISTENING PRACTICE / ${esc(item.title)}</div><h1>${esc(current.title)}</h1><p>先完整听一遍，再选择你认为正确的答案。</p></div><div class="task-pager"><button class="button light" data-action="previous" ${state.taskIndex === 0 ? "disabled" : ""}>上一组</button><strong>${state.taskIndex + 1}</strong><span>/ ${item.tasks.length}</span><button class="button light" data-action="next" ${state.taskIndex === item.tasks.length - 1 ? "disabled" : ""}>下一组</button></div></div><div class="audio-card"><div class="audio-card-top"><div><div class="audio-label">NOW PLAYING · ${esc(current.section)}</div><h2>Questions ${current.questions[0]?.number || ""} to ${current.questions.at(-1)?.number || ""}</h2><p>${esc(current.context)}</p></div><div class="audio-card-tools"><span class="audio-icon">◖◗</span><button class="button audio-clear" type="button" data-action="clear-task" data-clear-task="${esc(current.id)}" title="清除本段对话的作答、成绩和错题记录">清除本段选择</button></div></div><audio id="audio-player" controls preload="metadata" src="${esc(current.audio)}"></audio><button type="button" class="button transcript-quick-toggle" data-action="toggle-transcript" aria-controls="transcript-current">显示 / 隐藏听力原文</button></div><section class="question-panel"><div class="question-panel-head"><div><h2>选择题</h2><span>已选择 ${selectedCount} / ${current.questions.length}</span></div>${result ? `<span class="score-pill">本组得分 ${result.score}/${result.total}</span>` : "<span>提交后显示答案</span>"}</div>${current.questions.map((question) => questionTemplate(question, answers)).join("")}<div class="question-actions"><span class="hint">${state.submitted ? "点击下方“听力原文”可回到当前听力段落。" : "每组听力可以反复播放，提交后仍可继续下一组。"}</span><div class="action-group"><button class="button ghost" data-action="reset-task">清空选择</button><button class="button primary" data-action="submit-task">${state.submitted ? "重新提交本组" : "提交本组答案"}</button></div></div>${(state.submitted || state.showTranscript) ? transcriptTemplate(current, "transcript-current") : ""}</section></section></main>`;
+    return `${header("practice", `${item.title} · 练习中`)}<main class="practice-layout">${sidePapers()}<section class="practice-main"><div class="practice-heading"><div>${state.wrongReturn ? '<button class=practice-return type=button data-action=return-wrong>返回错题回顾</button>' : ''}<div class="eyebrow" style="color:var(--teal)">LISTENING PRACTICE / ${esc(item.title)}</div><h1>${esc(current.title)}</h1><p>先完整听一遍，再选择你认为正确的答案。</p></div><div class="task-pager"><button class="button light" data-action="previous" ${state.taskIndex === 0 ? "disabled" : ""}>上一组</button><strong>${state.taskIndex + 1}</strong><span>/ ${item.tasks.length}</span><button class="button light" data-action="next" ${state.taskIndex === item.tasks.length - 1 ? "disabled" : ""}>下一组</button></div></div><div class="audio-card"><div class="audio-card-top"><div><div class="audio-label">NOW PLAYING · ${esc(current.section)}</div><h2>Questions ${current.questions[0]?.number || ""} to ${current.questions.at(-1)?.number || ""}</h2><p>${esc(current.context)}</p></div><div class="audio-card-tools"><span class="audio-icon">◖◗</span><button class="button audio-clear" type="button" data-action="clear-task" data-clear-task="${esc(current.id)}" title="清除本段对话的作答、成绩和错题记录">清除本段选择</button></div></div><audio id="audio-player" controls preload="metadata" src="${esc(current.audio)}"></audio><button type="button" class="button transcript-quick-toggle" data-action="toggle-transcript" aria-controls="transcript-current">显示 / 隐藏听力原文</button></div><section class="question-panel"><div class="question-panel-head"><div><h2>选择题</h2><span>已选择 ${selectedCount} / ${current.questions.length}</span></div>${result ? `<span class="score-pill">本组得分 ${result.score}/${result.total}</span>` : "<span>提交后显示答案</span>"}</div>${current.questions.map((question) => questionTemplate(question, answers)).join("")}<div class="question-actions"><span class="hint">${state.submitted ? "点击下方“听力原文”可回到当前听力段落。" : "每组听力可以反复播放，提交后仍可继续下一组。"}</span><div class="action-group"><button class="button ghost" data-action="reset-task">清空选择</button><button class="button primary" data-action="submit-task">${state.submitted ? "重新提交本组" : "提交本组答案"}</button></div></div>${state.showTranscript ? transcriptTemplate(current, "transcript-current") : ""}</section></section></main>`;
   }
   function questionTemplate(question, answers) {
     const selected = answers[question.number];
@@ -676,13 +686,6 @@
       return `<button type="button" class="transcript-line ${index === 0 ? "current-line" : ""}" data-transcript-line="${index}"${mockAttr}${start}${end}>${esc(line)}</button>`;
     }).join("");
   }
-  function transcriptTemplate(current, id, mock = false) {
-    const action = mock ? "focus-mock-transcript" : "focus-transcript";
-    const audioAttr = mock ? `data-mock-audio-id="${current.mockId}"` : "";
-    const containerAudioAttr = mock ? ` data-transcript-audio-id="${esc(current.mockId)}"` : "";
-    return `<div class="transcript ${mock ? "mock-transcript" : ""}" id="${id}"${containerAudioAttr}><button class="transcript-heading" data-action="${action}" ${audioAttr}><span>听力原文 · TRANSCRIPT</span><small>点击句子跳到这里并继续播放</small></button>${transcriptLinesTemplate(current, mock)}</div>`;
-  }
-
   function randomPick(list, count) {
     return [...list].sort(() => Math.random() - 0.5).slice(0, count);
   }
@@ -701,44 +704,10 @@
     }
     return search(0, target, []) || [];
   }
-  function createMock() {
-    const source = mockTasks();
-    const selected = [
-      ...randomPickTotal(source.filter((item) => item.section === "Sec A"), 8),
-      ...randomPickTotal(source.filter((item) => item.section === "Sec B"), 7),
-      ...randomPickTotal(source.filter((item) => item.section === "Sec C"), 10)
-    ];
-    let number = 1;
-    const groups = selected.map((item, index) => {
-      const sourcePaper = data.papers.find((paperItem) => paperItem.tasks.some((taskItem) => taskItem.id === item.id));
-      return {
-        ...item,
-        mockId: `${item.id}-${Date.now()}-${index}`,
-        sourcePaper: sourcePaper?.title || "真题",
-        groupNumber: index + 1,
-        questions: item.questions.map((question) => ({ ...question, number: number++ }))
-      };
-    });
-    state.mock = { groups, answers: {}, highlights: {}, submitted: false, score: 0, correct: 0, bySection: {} };
-    state.mock.audioStatus = `\u6b63\u5728\u62fc\u63a5 ${state.mock.groups.length} \u6bb5\u97f3\u9891\uff0c\u8bf7\u7a0d\u5019\u2026`;
-    state.screen = "mock";
-    render();
-  }
   function mockTotalQuestions() { return state.mock.groups.reduce((sum, group) => sum + group.questions.length, 0); }
   function mockAnswersCount() { return Object.keys(state.mock.answers).length; }
   function mockWeight(section) { return section === "Sec C" ? 14 : 7; }
   function mockSectionName(section) { return section === "Sec A" ? "第一部分 · 长对话" : section === "Sec B" ? "第二部分 · 听力篇章" : "第三部分 · 讲座 / 讲话"; }
-  function mockTemplate() {
-    const mock = state.mock;
-    const total = mockTotalQuestions();
-    const answered = mockAnswersCount();
-    const summary = mock.submitted ? `<section class="score-summary"><div class="score-big">${mock.score}<small> / 249 分</small></div><p>本套模拟已完成 · ${mock.correct} / ${total} 题回答正确</p><div class="score-breakdown"><span>第一部分：${mock.bySection["Sec A"]?.score || 0} / 56</span><span>第二部分：${mock.bySection["Sec B"]?.score || 0} / 49</span><span>第三部分：${mock.bySection["Sec C"]?.score || 0} / 140</span></div></section>` : "";
-    return `${header("mock", "随机模拟练习")}<main class="mock-page"><div class="mock-heading"><div><div class="eyebrow" style="color:var(--teal)">CET-6 · RANDOM MOCK</div><h1>随机模拟练习</h1><p>从历年真题随机抽取 7 组，连续完成全部 25 题后统一评分。</p></div><div class="mock-actions"><button class="button ghost" data-action="mock-new">换一套</button><button class="button light" data-action="home">返回真题</button></div></div>${summary}<div class="mock-stats"><div class="mock-stat"><strong>25</strong><span>听力题总数</span></div><div class="mock-stat"><strong>8 × 7</strong><span>第一部分 · 56分</span></div><div class="mock-stat"><strong>7 × 7</strong><span>第二部分 · 49分</span></div><div class="mock-stat"><strong>10 × 14</strong><span>第三部分 · 140分</span></div></div>${mock.groups.map(mockGroupTemplate).join("")}<div class="mock-submit"><div><strong>整套模拟</strong><p>已作答 ${answered} / ${total} 题${mock.submitted ? " · 可重新提交" : " · 做完全部题目后交卷"}</p></div><button class="button" data-action="submit-mock" ${!mock.submitted && answered < total ? "disabled" : ""}>${mock.submitted ? "重新评分" : "交卷并评分"}</button></div></main>`;
-  }
-  function mockGroupTemplate(group) {
-    const answers = state.mock.answers;
-    return `<section class="mock-group" id="mock-group-${group.groupNumber}"><div class="mock-group-head"><div><p>第 ${group.groupNumber} 组 · ${mockSectionName(group.section)}</p><h2>${esc(group.sourcePaper)} / ${esc(group.title)}</h2></div><span class="score-pill">每题 ${mockWeight(group.section)} 分</span></div><div class="audio-card"><div class="audio-card-top"><div><div class="audio-label">MOCK AUDIO · ${esc(group.section)}</div><h2>Questions ${group.questions[0]?.number || ""} to ${group.questions.at(-1)?.number || ""}</h2><p>${esc(group.context)}</p></div><span class="audio-icon">◖◗</span></div><audio controls preload="metadata" data-mock-audio="${group.mockId}" src="${esc(group.audio)}"></audio></div><section class="question-panel"><div class="question-panel-head"><div><h2>${mockSectionName(group.section)}</h2><span>${group.questions.length} 道题 · 每题 ${mockWeight(group.section)} 分</span></div><span>${state.mock.submitted ? "已评分" : "请作答"}</span></div>${group.questions.map((question) => mockQuestionTemplate(question, group, answers)).join("")}</section>${state.mock.submitted ? transcriptTemplate(group, `mock-transcript-${group.groupNumber}`, true) : ""}</section>`;
-  }
   function mockQuestionTemplate(question, group, answers) {
     const id = group.mockId + "-" + question.number;
     const selected = answers[id];
@@ -987,19 +956,6 @@
     if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
     document.getElementById("transcript-current")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
-  function focusMockTranscript(eventTarget) {
-    const id = eventTarget.dataset.mockAudioId;
-    const audio = app.querySelector(`[data-mock-audio="${id}"]`);
-    if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
-    eventTarget.closest(".transcript")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-  function render() {
-    if (state.screen === "mock") app.innerHTML = mockTemplate();
-    else if (state.screen === "wrong") app.innerHTML = wrongTemplate();
-    else if (state.screen === "practice") app.innerHTML = practiceTemplate();
-    else app.innerHTML = homeTemplate();
-  }
-
   app.addEventListener("input", (event) => {
     if (!event.target.matches("[data-filter]")) return;
     state.filter = event.target.value;
@@ -1216,6 +1172,10 @@
     const actionTarget = event.target.closest("[data-action]");
     const action = actionTarget?.dataset.action;
     if (!action) return;
+    if (action === "start-mock") { startMock(); return; }
+    if (action === "toggle-transcript") { state.showTranscript = !state.showTranscript; render(); return; }
+    if (action === "export-data") { exportProgressData(); return; }
+    if (action === "restore-data") { app.querySelector("[data-restore-file]")?.click(); return; }
     if (action === "home") { state.screen = "home"; state.submitted = false; render(); }
     if (action === "open-mock") createMock();
     if (action === "mock-new") createMock();
@@ -1291,11 +1251,12 @@
       saved[state.paperId].best = Math.max(saved[state.paperId].best || 0, score);
       persist();
       state.submitted = true;
+      state.showTranscript = true;
       render();
     }
-    if (action === "reset-task") { state.answers[task().id] = {}; state.submitted = false; render(); }
-    if (action === "previous" && state.taskIndex > 0) { state.taskIndex -= 1; state.submitted = false; render(); }
-    if (action === "next" && state.taskIndex < paper().tasks.length - 1) { state.taskIndex += 1; state.submitted = false; render(); }
+    if (action === "reset-task") { state.answers[task().id] = {}; state.submitted = false; state.showTranscript = false; render(); }
+    if (action === "previous" && state.taskIndex > 0) { state.taskIndex -= 1; state.submitted = false; state.showTranscript = false; render(); }
+    if (action === "next" && state.taskIndex < paper().tasks.length - 1) { state.taskIndex += 1; state.submitted = false; state.showTranscript = false; render(); }
     if (action === "focus-transcript") focusTranscript();
     if (action === "focus-mock-transcript") focusMockTranscript(actionTarget);
     if (action === "submit-mock") submitMock();
@@ -1336,7 +1297,14 @@
   // Mock mode is prepared first, then started separately so the user sees
   // the random paper only after pressing “开始考试”.
   function disposeMockAudio() {
-    if (state.mock?.audioUrl) URL.revokeObjectURL(state.mock.audioUrl);
+    if (mockAudioAbortController) {
+      mockAudioAbortController.abort();
+      mockAudioAbortController = null;
+    }
+    if (state.mock?.audioUrl) {
+      URL.revokeObjectURL(state.mock.audioUrl);
+      state.mock.audioUrl = "";
+    }
   }
   function createMock() {
     disposeMockAudio();
@@ -1372,8 +1340,7 @@
     state.mock.started = true;
     state.mock.showQuestions = false;
     state.mock.audioStatus = `\u6b63\u5728\u62fc\u63a5 ${state.mock.groups.length} \u6bb5\u97f3\u9891\uff0c\u8bf7\u7a0d\u5019\u2026`;
-    state.mock.audioStatus = "正在拼接 7 段音频，请稍候…";
-    state.mock.audioStatus = `\u6b63\u5728\u62fc\u63a5 ${state.mock.groups.length} \u6bb5\u97f3\u9891\uff0c\u8bf7\u7a0d\u5019\u2026`;
+
     state.screen = "mock";
     render();
     prepareMockAudio();
@@ -1415,6 +1382,8 @@
   function setPlaylistTrack(mock, player, index, autoplay = false, startAt = 0) {
     const group = mock.groups[index];
     if (!group) return false;
+    if (typeof player._playlistReadyCleanup === "function") player._playlistReadyCleanup();
+    player._playlistReadyCleanup = null;
     player.pause();
     player.dataset.playlistIndex = String(index);
     player.dataset.playlistRetries = "0";
@@ -1422,11 +1391,11 @@
     player.load();
     if (!autoplay) return true;
     let settled = false;
+    let cleanup = () => {};
     const playWhenReady = () => {
-      if (settled) return;
+      if (settled || player.dataset.playlistIndex !== String(index)) return;
       settled = true;
-      player.removeEventListener("loadedmetadata", playWhenReady);
-      player.removeEventListener("canplay", playWhenReady);
+      cleanup();
       if (startAt > 0) {
         try { player.currentTime = startAt; } catch (error) { /* metadata is still loading */ }
       }
@@ -1435,6 +1404,12 @@
         setMockAudioStatus(mock, "下一段音频已准备好，请点击播放继续整套听力");
       });
     };
+    cleanup = () => {
+      player.removeEventListener("loadedmetadata", playWhenReady);
+      player.removeEventListener("canplay", playWhenReady);
+      if (player._playlistReadyCleanup === cleanup) player._playlistReadyCleanup = null;
+    };
+    player._playlistReadyCleanup = cleanup;
     player.addEventListener("loadedmetadata", playWhenReady);
     player.addEventListener("canplay", playWhenReady);
     if (player.readyState >= 1) window.setTimeout(playWhenReady, 0);
@@ -1483,10 +1458,16 @@
     const mock = state.mock;
     const player = app.querySelector("#mock-audio-player");
     if (!mock || !player) return;
+    if (mockAudioAbortController) mockAudioAbortController.abort();
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    mockAudioAbortController = controller;
     if (isMobileAudioDevice()) {
       prepareMockPlaylist(mock, player, "手机端已准备连续播放，点击播放后会自动衔接全部音频");
+      if (mockAudioAbortController === controller) mockAudioAbortController = null;
       return;
     }
+    const yieldToUi = () => new Promise((resolve) => window.setTimeout(resolve, 0));
+    const requestOptions = controller ? { cache: "force-cache", signal: controller.signal } : { cache: "force-cache" };
     let context = null;
     try {
       const AudioContextClass = window.AudioContext || window.webkitAudioContext;
@@ -1507,10 +1488,13 @@
       let offset = 0;
       for (let index = 0; index < mock.groups.length; index += 1) {
         const group = mock.groups[index];
-        const response = await fetch(group.audio, { cache: "force-cache" });
+        if (controller?.signal.aborted || state.mock !== mock) return;
+        await yieldToUi();
+        const response = await fetch(group.audio, requestOptions);
         if (!response.ok) throw new Error("audio-fetch-" + response.status);
         const bytes = await response.arrayBuffer();
         const buffer = await context.decodeAudioData(bytes);
+        if (controller?.signal.aborted || state.mock !== mock) return;
         const length = lengths[index];
         if (Math.abs(buffer.duration - durations[index]) > 2.5) throw new Error("audio-duration-mismatch");
         segments.push({ mockId: group.mockId, start: offset / sampleRate, end: (offset + length) / sampleRate, audio: group.audio });
@@ -1522,6 +1506,8 @@
         }
         offset += length + (index < mock.groups.length - 1 ? gapSamples : 0);
       }
+      await yieldToUi();
+      if (controller?.signal.aborted || state.mock !== mock) return;
       const url = URL.createObjectURL(audioBufferToWav(combined));
       if (state.mock !== mock || !player.isConnected) {
         URL.revokeObjectURL(url);
@@ -1534,13 +1520,14 @@
       player.load();
       setMockAudioStatus(mock, mock.groups.length + " 段音频已拼接为一个连续音源 · 可直接播放");
     } catch (error) {
-      if (state.mock !== mock || !player.isConnected) return;
+      if (controller?.signal.aborted || state.mock !== mock || !player.isConnected) return;
       prepareMockPlaylist(mock, player, "连续音源暂时无法拼接，已切换为单播放器自动连续播放");
       console.warn("Mock audio concatenation fallback", error);
     } finally {
       if (context) {
         try { await context.close(); } catch (closeError) { /* already closed */ }
       }
+      if (mockAudioAbortController === controller) mockAudioAbortController = null;
     }
   }
   function mockTemplate() {
@@ -1572,7 +1559,7 @@
       eventTarget.closest(".transcript")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
   function setTranscriptActive(container, time) {
-    if (!container || !Number.isFinite(time)) return;
+    if (!container) return;
     const lines = [...container.querySelectorAll("[data-transcript-line]")];
     let active = lines.find((line) => time >= Number(line.dataset.transcriptStart) && time < Number(line.dataset.transcriptEnd));
     if (!active && lines.length && time >= Number(lines.at(-1).dataset.transcriptStart)) active = lines.at(-1);
@@ -1592,15 +1579,29 @@
     }
     if (audio.id !== "mock-audio-player" || !state.mock) return;
     const currentTime = audio.currentTime;
-    app.querySelectorAll(".mock-transcript[data-transcript-audio-id]").forEach((container) => {
-      const id = container.dataset.transcriptAudioId;
-      const index = state.mock.groups.findIndex((group) => group.mockId === id);
-      const segment = state.mock.audioSegments?.find((item) => item.mockId === id);
-      let relative = NaN;
-      if (state.mock.audioMode === "combined" && segment && currentTime >= segment.start && currentTime <= segment.end) relative = currentTime - segment.start;
-      if (state.mock.audioMode === "playlist" && Number(audio.dataset.playlistIndex) === index) relative = currentTime;
-      setTranscriptActive(container, relative);
-    });
+    let activeId = "";
+    let relative = NaN;
+    if (state.mock.audioMode === "combined") {
+      const segment = state.mock.audioSegments?.find((item) => currentTime >= item.start && currentTime <= item.end);
+      if (segment) {
+        activeId = segment.mockId;
+        relative = currentTime - segment.start;
+      }
+    } else {
+      const index = Number(audio.dataset.playlistIndex);
+      activeId = state.mock.groups[index]?.mockId || "";
+      if (activeId) relative = currentTime;
+    }
+    const previousId = audio.dataset.activeTranscriptId || "";
+    if (previousId && previousId !== activeId) {
+      const previous = [...app.querySelectorAll(".mock-transcript[data-transcript-audio-id]")].find((item) => item.dataset.transcriptAudioId === previousId);
+      setTranscriptActive(previous, NaN);
+    }
+    const container = activeId
+      ? [...app.querySelectorAll(".mock-transcript[data-transcript-audio-id]")].find((item) => item.dataset.transcriptAudioId === activeId)
+      : null;
+    setTranscriptActive(container, relative);
+    audio.dataset.activeTranscriptId = activeId;
   }
   function playAudioAt(audio, time) {
     const play = () => {
@@ -1774,26 +1775,15 @@
     decorateMockAudio();
     decorateTranscriptAudio();
   }
-  app.addEventListener("click", (event) => {
-    const action = event.target.closest("[data-action]")?.dataset.action;
-    if (action === "start-mock") startMock();
-  });
+
   function transcriptTemplate(current, id, mock = false) {
     const action = mock ? "focus-mock-transcript" : "focus-transcript";
     const audioAttr = mock ? `data-mock-audio-id="${current.mockId}"` : "";
     const containerAudioAttr = mock ? ` data-transcript-audio-id="${esc(current.mockId)}"` : "";
     return `<div class="transcript ${mock ? "mock-transcript" : ""}" id="${id}"${containerAudioAttr}><button class="transcript-heading" data-action="${action}" ${audioAttr}><span>听力原文 · TRANSCRIPT</span><small>点击句子跳到这里并继续播放</small></button>${transcriptLinesTemplate(current, mock)}</div>`;
   }
-  app.addEventListener("click", (event) => {
-    if (!event.target.closest('[data-action="toggle-transcript"]')) return;
-    state.showTranscript = !state.showTranscript;
-    render();
-  });
-  app.addEventListener("click", (event) => {
-    const action = event.target.closest("[data-action]")?.dataset.action;
-    if (action === "export-data") exportProgressData();
-    if (action === "restore-data") app.querySelector("[data-restore-file]")?.click();
-  });
+
+
   let wrongLongPressTimer = 0;
   let wrongLongPressCard = null;
   let wrongLongPressPoint = null;
