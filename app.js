@@ -610,10 +610,13 @@
         items.push({
           id: mock.id + "-" + group.groupNumber + "-" + question.number,
           sourcePaper: group.sourcePaper,
+          sourcePaperId: group.sourcePaperId,
+          sourceTaskId: group.id,
           taskTitle: group.title,
           section: group.section,
           groupNumber: group.groupNumber,
           questionNumber: question.number,
+          sourceQuestionNumber: question.sourceNumber ?? question.number,
           stem: question.stem,
           answer: question.answer,
           chosen: selected || "未作答"
@@ -668,7 +671,10 @@
       '</button>';
   }
   function mockWrongCardTemplate(item) {
-    return '<article class="wrong-card mock-wrong-card" data-mock-set-id="' + esc(item.setId) + '" data-mock-wrong-id="' + esc(item.id) + '">' +
+    const locateAttrs = item.sourcePaperId && item.sourceTaskId && item.sourceQuestionNumber != null
+      ? ' data-wrong-paper="' + esc(item.sourcePaperId) + '" data-wrong-task="' + esc(item.sourceTaskId) + '" data-wrong-question="' + esc(item.sourceQuestionNumber) + '"'
+      : "";
+    return '<article class="wrong-card mock-wrong-card" data-mock-set-id="' + esc(item.setId) + '" data-mock-wrong-id="' + esc(item.id) + '"' + locateAttrs + '>' +
       '<div><div class="wrong-source-tag mock">模拟组卷 · 第 ' + esc(item.groupNumber) + ' 组</div><h3>' + esc(item.questionNumber) + '. ' + esc(item.stem) + '</h3><p>' + esc(item.sourcePaper) + ' · ' + esc(item.taskTitle) + ' · ' + esc(mockSectionName(item.section)) + '</p></div>' +
       '<span class="wrong-meta"><span class="wrong-answer">你的答案：' + esc(item.chosen) + '</span><span class="wrong-time">组卷时间：' + esc(formatReviewTime(item.submittedAt)) + '</span><span>正确：' + esc(item.answer) + '</span></span>' +
       '</article>';
@@ -906,8 +912,9 @@
         ...item,
         mockId: `${item.id}-${createdAt}-${index}`,
         sourcePaper: sourcePaper?.title || "真题",
+        sourcePaperId: sourcePaper?.id,
         groupNumber: index + 1,
-        questions: item.questions.map((question) => ({ ...question, number: number++ }))
+        questions: item.questions.map((question) => ({ ...question, sourceNumber: question.number, number: number++ }))
       };
     });
     state.mock = { id: `mock-${createdAt}`, createdAt, groups, answers: {}, submitted: false, started: false, audioUrl: "", audioSegments: [], audioMode: "combined", audioStatus: "" , score: 0, correct: 0, bySection: {} };

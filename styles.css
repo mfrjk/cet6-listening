@@ -269,3 +269,7 @@ body{background:radial-gradient(circle at 8% 0%,rgba(216,248,244,.72),transparen
   .wrong-card .wrong-meta{justify-content:space-between}
   .wrong-source-tag{font-size:10px}
 }
+
+
+.mock-wrong-card[data-wrong-paper]{cursor:pointer}
+.mock-wrong-card[data-wrong-paper]:hover{border-color:#9adbd3;box-shadow:var(--shadow)}
