@@ -56,12 +56,26 @@
       submittedAt: result.at
     }));
   }));
+
+  const locateMockSource = (item) => {
+    if (item.sourcePaperId && item.sourceTaskId && item.sourceQuestionNumber != null) return item;
+    const candidatePapers = item.sourcePaper ? data.papers.filter((paperItem) => paperItem.title === item.sourcePaper) : data.papers;
+    for (const paperItem of candidatePapers) {
+      const candidateTasks = item.taskTitle ? paperItem.tasks.filter((taskItem) => taskItem.title === item.taskTitle) : paperItem.tasks;
+      for (const taskItem of candidateTasks) {
+        const question = taskItem.questions.find((questionItem) => questionItem.stem === item.stem && (item.answer == null || questionItem.answer === item.answer)) ||
+          taskItem.questions.find((questionItem) => questionItem.stem === item.stem);
+        if (question) return { ...item, sourcePaperId: paperItem.id, sourceTaskId: taskItem.id, sourceQuestionNumber: question.number };
+      }
+    }
+    return item;
+  };
   const mockWrongItems = () => {
     const sets = Array.isArray(saved[mockWrongStorageKey]) ? saved[mockWrongStorageKey] : [];
     return sets.flatMap((set) => {
       const deleted = new Set(set.deletedIds || []);
       return (set.items || []).filter((item) => !deleted.has(item.id)).map((item) => ({
-        ...item,
+        ...locateMockSource(item),
         setId: set.id,
         submittedAt: set.submittedAt
       }));
