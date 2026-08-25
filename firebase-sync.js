@@ -1,96 +1,82 @@
-import { initializeApp } from "./vendor/firebase/firebase-app.js";
-import {
-  getAuth,
-  onAuthStateChanged as listenAuthState,
-  createUserWithEmailAndPassword,
-  signInWithEmailAndPassword,
-  signOut as firebaseSignOut
-} from "./vendor/firebase/firebase-auth.js";
-import {
-  getDatabase,
-  ref,
-  get,
-  set,
-  onValue,
-  off
-} from "./vendor/firebase/firebase-database.js";
+(function () {
+  const config = window.CET6_FIREBASE_CONFIG;
+  const authListeners = new Set();
+  let currentUser;
+  let database;
+  let auth;
+  let progressUnsubscribe = null;
 
-const config = window.CET6_FIREBASE_CONFIG;
-const authListeners = new Set();
-let currentUser;
-let database;
-let auth;
-let progressUnsubscribe = null;
+  const api = {
+    provider: "password",
+    status: "loading",
+    get user() {
+      return currentUser || null;
+    },
+    onAuthStateChanged(callback) {
+      authListeners.add(callback);
+      if (currentUser !== undefined) callback(currentUser);
+      return () => authListeners.delete(callback);
+    },
+    async register(email, password) {
+      if (!auth) throw new Error("firebase-not-ready");
+      const result = await auth.createUserWithEmailAndPassword(email.trim(), password);
+      return result.user;
+    },
+    async signIn(email, password) {
+      if (!auth) throw new Error("firebase-not-ready");
+      const result = await auth.signInWithEmailAndPassword(email.trim(), password);
+      return result.user;
+    },
+    async signOut() {
+      if (auth) await auth.signOut();
+    },
+    async loadProgress() {
+      if (!currentUser || !database) return null;
+      const snapshot = await database.ref("users/" + currentUser.uid + "/progress").once("value");
+      return snapshot.exists() ? snapshot.val() : null;
+    },
+    watchProgress(callback) {
+      if (progressUnsubscribe) progressUnsubscribe();
+      if (!currentUser || !database) return () => {};
+      const progressRef = database.ref("users/" + currentUser.uid + "/progress");
+      const listener = progressRef.on(
+        "value",
+        (snapshot) => callback(snapshot.exists() ? snapshot.val() : null, null),
+        (error) => callback(null, error)
+      );
+      progressUnsubscribe = () => {
+        progressRef.off("value", listener);
+        progressUnsubscribe = null;
+      };
+      return progressUnsubscribe;
+    },
+    async saveProgress(data) {
+      if (!currentUser || !database) return;
+      await database.ref("users/" + currentUser.uid + "/progress").set({
+        version: 1,
+        updatedAt: Date.now(),
+        data
+      });
+    }
+  };
 
-const api = {
-  provider: "password",
-  status: "loading",
-  get user() {
-    return currentUser || null;
-  },
-  onAuthStateChanged(callback) {
-    authListeners.add(callback);
-    if (currentUser !== undefined) callback(currentUser);
-    return () => authListeners.delete(callback);
-  },
-  async register(email, password) {
-    if (!auth) throw new Error("firebase-not-ready");
-    const result = await createUserWithEmailAndPassword(auth, email.trim(), password);
-    return result.user;
-  },
-  async signIn(email, password) {
-    if (!auth) throw new Error("firebase-not-ready");
-    const result = await signInWithEmailAndPassword(auth, email.trim(), password);
-    return result.user;
-  },
-  async signOut() {
-    if (auth) await firebaseSignOut(auth);
-  },
-  async loadProgress() {
-    if (!currentUser || !database) return null;
-    const snapshot = await get(ref(database, "users/" + currentUser.uid + "/progress"));
-    return snapshot.exists() ? snapshot.val() : null;
-  },
-  watchProgress(callback) {
-    if (progressUnsubscribe) progressUnsubscribe();
-    if (!currentUser || !database) return () => {};
-    const progressRef = ref(database, "users/" + currentUser.uid + "/progress");
-    const listener = onValue(
-      progressRef,
-      (snapshot) => callback(snapshot.exists() ? snapshot.val() : null, null),
-      (error) => callback(null, error)
-    );
-    progressUnsubscribe = () => {
-      off(progressRef, "value", listener);
-      progressUnsubscribe = null;
-    };
-    return progressUnsubscribe;
-  },
-  async saveProgress(data) {
-    if (!currentUser || !database) return;
-    await set(ref(database, "users/" + currentUser.uid + "/progress"), {
-      version: 1,
-      updatedAt: Date.now(),
-      data
+  window.CET_FIREBASE_SYNC = api;
+
+  try {
+    if (!window.firebase) throw new Error("firebase-sdk-not-loaded");
+    const firebaseApp = window.firebase.initializeApp(config);
+    auth = window.firebase.auth(firebaseApp);
+    database = window.firebase.database(firebaseApp);
+    api.status = "ready";
+    auth.onAuthStateChanged((user) => {
+      currentUser = user;
+      authListeners.forEach((callback) => callback(user));
     });
+  } catch (error) {
+    api.status = "error";
+    api.error = error;
+    console.error("Firebase initialization failed", error);
   }
-};
 
-window.CET_FIREBASE_SYNC = api;
-
-try {
-  const firebaseApp = initializeApp(config);
-  auth = getAuth(firebaseApp);
-  database = getDatabase(firebaseApp, config.databaseURL);
-  api.status = "ready";
-  listenAuthState(auth, (user) => {
-    currentUser = user;
-    authListeners.forEach((callback) => callback(user));
-  });
-} catch (error) {
-  api.status = "error";
-  api.error = error;
-  console.error("Firebase initialization failed", error);
-}
-
-window.dispatchEvent(new CustomEvent("cet-firebase-ready"));
+  window.dispatchEvent(new CustomEvent("cet-firebase-ready"));
+})();
