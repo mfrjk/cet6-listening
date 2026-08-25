@@ -2,7 +2,7 @@
   const data = window.CET_LISTENING_DATA;
   const storageKey = "cet6-listening-progress-v1";
   const app = document.getElementById("app");
-  const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
+  let saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
   const state = {
     screen: "home",
     paperId: data.papers[0].id,
@@ -17,7 +17,11 @@
     suppressOptionClick: false,
     optionPointer: null,
     optionDragging: false,
-    showTranscript: false
+    showTranscript: false,
+    cloudUser: null,
+    cloudStatus: "local",
+    cloudBound: false,
+    cloudWatchStop: null
   };
 
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -48,7 +52,191 @@
   }));
   const correctCount = () => data.papers.reduce((sum, item) => sum + Object.values(recordFor(item.id).completed || {}).reduce((n, entry) => n + (entry.score || 0), 0), 0);
 
-  function persist() { localStorage.setItem(storageKey, JSON.stringify(saved)); }
+  function persist(options = {}) {
+    localStorage.setItem(storageKey, JSON.stringify(saved));
+    const sync = window.CET_FIREBASE_SYNC;
+    if (options.skipCloud || !state.cloudUser || !sync?.saveProgress) return;
+    state.cloudStatus = "syncing";
+    sync.saveProgress(saved).then(() => {
+      if (state.cloudUser) {
+        state.cloudStatus = "synced";
+        render();
+      }
+    }).catch((error) => {
+      state.cloudStatus = "error";
+      console.warn("Firebase progress save failed", error);
+      render();
+    });
+  }
+
+  function cloudErrorText(error) {
+    const code = error?.code || "";
+    return ({
+      "auth/invalid-credential": "\u90ae\u7bb1\u6216\u5bc6\u7801\u4e0d\u6b63\u786e\u3002",
+      "auth/user-not-found": "\u8d26\u53f7\u4e0d\u5b58\u5728\uff0c\u8bf7\u5148\u6ce8\u518c\u3002",
+      "auth/wrong-password": "\u90ae\u7bb1\u6216\u5bc6\u7801\u4e0d\u6b63\u786e\u3002",
+      "auth/email-already-in-use": "\u8be5\u90ae\u7bb1\u5df2\u6ce8\u518c\uff0c\u8bf7\u76f4\u63a5\u767b\u5f55\u3002",
+      "auth/invalid-email": "\u90ae\u7bb1\u683c\u5f0f\u4e0d\u6b63\u786e\u3002",
+      "auth/weak-password": "\u5bc6\u7801\u81f3\u5c11\u9700\u8981 6 \u4f4d\u3002",
+      "auth/too-many-requests": "\u5c1d\u8bd5\u6b21\u6570\u8fc7\u591a\uff0c\u8bf7\u7a0d\u540e\u518d\u8bd5\u3002",
+      "auth/network-request-failed": "\u7f51\u7edc\u8fde\u63a5 Firebase \u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u7f51\u7edc\u3002",
+      "auth/operation-not-allowed": "\u8bf7\u5728 Firebase \u63a7\u5236\u53f0\u5f00\u542f\u201c\u90ae\u7bb1/\u5bc6\u7801\u201d\u767b\u5f55\u3002"
+    })[code] || "\u4e91\u7aef\u64cd\u4f5c\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002";
+  }
+
+  function showCloudAuthModal(mode = "signin") {
+    document.querySelector(".cloud-auth-modal")?.remove();
+    const modal = document.createElement("div");
+    modal.className = "cloud-auth-modal";
+    const registering = mode === "register";
+    modal.innerHTML =
+      '<div class="cloud-auth-dialog" role="dialog" aria-modal="true" aria-labelledby="cloud-auth-title">' +
+      '<button class="cloud-auth-close" type="button" aria-label="\u5173\u95ed">\u00d7</button>' +
+      '<div class="eyebrow" style="color:var(--teal)">CET-6 CLOUD SYNC</div>' +
+      '<h2 id="cloud-auth-title">' + (registering ? "\u6ce8\u518c\u540c\u6b65\u8d26\u53f7" : "\u767b\u5f55\u540c\u6b65\u8d26\u53f7") + '</h2>' +
+      '<p>\u4f7f\u7528\u540c\u4e00\u4e2a\u90ae\u7bb1\u548c\u5bc6\u7801\u767b\u5f55\uff0c\u624b\u673a\u4e0e\u7535\u8111\u4f1a\u5171\u7528\u7ec3\u4e60\u8fdb\u5ea6\u3002</p>' +
+      '<form class="cloud-auth-form">' +
+      '<label>\u90ae\u7bb1<input type="email" name="email" autocomplete="email" required></label>' +
+      '<label>\u5bc6\u7801<input type="password" name="password" minlength="6" autocomplete="' + (registering ? "new-password" : "current-password") + '" required></label>' +
+      '<div class="cloud-auth-error" role="alert" hidden></div>' +
+      '<button class="button primary" type="submit">' + (registering ? "\u6ce8\u518c\u5e76\u540c\u6b65" : "\u767b\u5f55\u5e76\u540c\u6b65") + '</button>' +
+      '</form>' +
+      '<button class="cloud-auth-switch" type="button">' + (registering ? "\u5df2\u6709\u8d26\u53f7\uff1f\u76f4\u63a5\u767b\u5f55" : "\u8fd8\u6ca1\u6709\u8d26\u53f7\uff1f\u7acb\u5373\u6ce8\u518c") + '</button>' +
+      '</div>';
+    document.body.append(modal);
+    const close = () => modal.remove();
+    modal.querySelector(".cloud-auth-close").addEventListener("click", close);
+    modal.addEventListener("click", (event) => { if (event.target === modal) close(); });
+    modal.querySelector(".cloud-auth-switch").addEventListener("click", () => {
+      showCloudAuthModal(registering ? "signin" : "register");
+    });
+    modal.querySelector("form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const submit = form.querySelector("button[type=submit]");
+      const errorNode = form.querySelector(".cloud-auth-error");
+      const sync = window.CET_FIREBASE_SYNC;
+      if (!sync) {
+        errorNode.textContent = "\u4e91\u7aef\u6a21\u5757\u5c1a\u672a\u52a0\u8f7d\uff0c\u8bf7\u5237\u65b0\u9875\u9762\u540e\u91cd\u8bd5\u3002";
+        errorNode.hidden = false;
+        return;
+      }
+      submit.disabled = true;
+      errorNode.hidden = true;
+      try {
+        const email = form.elements.email.value.trim();
+        const password = form.elements.password.value;
+        if (registering) await sync.register(email, password);
+        else await sync.signIn(email, password);
+        close();
+      } catch (error) {
+        errorNode.textContent = cloudErrorText(error);
+        errorNode.hidden = false;
+        submit.disabled = false;
+      }
+    });
+    modal.querySelector("input")?.focus();
+  }
+
+  function handleCloudError(error) {
+    state.cloudStatus = "error";
+    console.warn("Firebase operation failed", error);
+    render();
+    window.alert(cloudErrorText(error));
+  }
+
+  function cloneCloudData(value) {
+    return JSON.parse(JSON.stringify(value || {}));
+  }
+
+  function mergeCloudProgress(localData, remoteData) {
+    const merged = cloneCloudData(localData);
+    Object.entries(remoteData || {}).forEach(([paperId, remoteRecord]) => {
+      if (!remoteRecord || typeof remoteRecord !== "object" || Array.isArray(remoteRecord)) return;
+      const localRecord = merged[paperId] || {};
+      const completed = { ...(localRecord.completed || {}) };
+      Object.entries(remoteRecord.completed || {}).forEach(([taskId, remoteResult]) => {
+        const localResult = completed[taskId];
+        if (!localResult || Number(remoteResult?.at || 0) > Number(localResult?.at || 0)) {
+          completed[taskId] = remoteResult;
+        }
+      });
+      merged[paperId] = {
+        ...localRecord,
+        ...remoteRecord,
+        completed,
+        deletedWrong: [...new Set([...(localRecord.deletedWrong || []), ...(remoteRecord.deletedWrong || [])])],
+        best: Math.max(Number(localRecord.best) || 0, Number(remoteRecord.best) || 0)
+      };
+    });
+    return merged;
+  }
+
+  function handleCloudRemoteData(remoteData) {
+    if (!state.cloudUser || !remoteData || typeof remoteData !== "object") return;
+    const merged = mergeCloudProgress(saved, remoteData);
+    const before = JSON.stringify(saved);
+    const after = JSON.stringify(merged);
+    if (after !== before) {
+      saved = merged;
+      persist({ skipCloud: true });
+      state.answers = {};
+      state.submitted = false;
+      render();
+    }
+    if (JSON.stringify(remoteData) !== after) {
+      window.CET_FIREBASE_SYNC?.saveProgress(merged).catch((error) => console.warn("Firebase merge save failed", error));
+    }
+  }
+
+  async function connectCloudUser(user) {
+    if (state.cloudWatchStop) {
+      state.cloudWatchStop();
+      state.cloudWatchStop = null;
+    }
+    state.cloudUser = user;
+    if (!user) {
+      state.cloudStatus = "local";
+      render();
+      return;
+    }
+    state.cloudStatus = "loading";
+    render();
+    const sync = window.CET_FIREBASE_SYNC;
+    try {
+      const payload = await sync.loadProgress();
+      const remoteData = payload?.data && typeof payload.data === "object" ? payload.data : null;
+      saved = mergeCloudProgress(saved, remoteData || {});
+      persist({ skipCloud: true });
+      state.answers = {};
+      state.submitted = false;
+      await sync.saveProgress(saved);
+      state.cloudStatus = "synced";
+      state.cloudWatchStop = sync.watchProgress((nextPayload, error) => {
+        if (error) {
+          state.cloudStatus = "error";
+          console.warn("Firebase progress watch failed", error);
+          render();
+          return;
+        }
+        const nextData = nextPayload?.data;
+        if (nextData) handleCloudRemoteData(nextData);
+      });
+      render();
+    } catch (error) {
+      state.cloudStatus = "error";
+      console.warn("Firebase progress load failed", error);
+      render();
+    }
+  }
+
+  function bindCloudSync() {
+    if (state.cloudBound) return;
+    const sync = window.CET_FIREBASE_SYNC;
+    if (!sync?.onAuthStateChanged) return;
+    state.cloudBound = true;
+    sync.onAuthStateChanged((user) => { connectCloudUser(user); });
+  }
 
   function exportProgressData() {
     const payload = {
@@ -146,7 +334,7 @@
     return `<header class="topbar">
       <button class="brand" data-action="home" aria-label="返回试卷列表"><span class="brand-mark">L</span><span class="brand-name">听力自习室<small>CET-6 LISTENING LAB</small></span></button>
       ${nav(active)}
-      <div class="top-actions"><div class="data-tools" aria-label="\u4e2a\u4eba\u6570\u636e\u5de5\u5177"><button class="data-tool data-export" type="button" data-action="export-data" title="\u4e0b\u8f7d\u7ec3\u4e60\u8fdb\u5ea6\u5907\u4efd">\u5bfc\u51fa\u6570\u636e</button><button class="data-tool data-restore" type="button" data-action="restore-data" title="\u4ece JSON \u6587\u4ef6\u6062\u590d\u7ec3\u4e60\u8fdb\u5ea6">\u6062\u590d\u6570\u636e</button><input class="data-restore-input" type="file" accept="application/json,.json" data-restore-file aria-label="\u9009\u62e9\u7ec3\u4e60\u6570\u636e\u6587\u4ef6" hidden></div><span class="source-label">${esc(context || "陈宇昂的专属听力空间")}</span><span class="profile-name">陈宇昂</span><span class="brand-mark profile-mark" style="width:32px;height:32px;border-radius:50%;font-size:14px">陈</span></div>
+      <div class="top-actions"><div class="cloud-tools" aria-label="\u4e91\u7aef\u540c\u6b65"><span class="cloud-status" data-cloud-status>\u672c\u673a\u4fdd\u5b58</span><button class="data-tool cloud-auth" type="button" data-action="cloud-auth" title="\u4f7f\u7528\u90ae\u7bb1\u548c\u5bc6\u7801\u767b\u5f55\u540c\u6b65">\u767b\u5f55\u540c\u6b65</button></div><div class="data-tools" aria-label="\u4e2a\u4eba\u6570\u636e\u5de5\u5177"><button class="data-tool data-export" type="button" data-action="export-data" title="\u4e0b\u8f7d\u7ec3\u4e60\u8fdb\u5ea6\u5907\u4efd">\u5bfc\u51fa\u6570\u636e</button><button class="data-tool data-restore" type="button" data-action="restore-data" title="\u4ece JSON \u6587\u4ef6\u6062\u590d\u7ec3\u4e60\u8fdb\u5ea6">\u6062\u590d\u6570\u636e</button><input class="data-restore-input" type="file" accept="application/json,.json" data-restore-file aria-label="\u9009\u62e9\u7ec3\u4e60\u6570\u636e\u6587\u4ef6" hidden></div><span class="source-label">${esc(context || "陈宇昂的专属听力空间")}</span><span class="profile-name">陈宇昂</span><span class="brand-mark profile-mark" style="width:32px;height:32px;border-radius:50%;font-size:14px">陈</span></div>
     </header>`;
   }
 
@@ -414,6 +602,11 @@
     if (action === "open-mock") createMock();
     if (action === "mock-new") createMock();
     if (action === "open-wrong") { state.screen = "wrong"; render(); }
+    if (action === "cloud-auth") {
+      const sync = window.CET_FIREBASE_SYNC;
+      if (state.cloudUser) sync?.signOut().catch(handleCloudError);
+      else showCloudAuthModal("signin");
+    }
     if (action === "toggle-sidebar") { state.sidebarCollapsed = !state.sidebarCollapsed; render(); }
     if (action === "submit-task") {
       const current = task();
@@ -841,6 +1034,22 @@
     button.setAttribute("aria-expanded", String(!state.sidebarCollapsed));
     button.setAttribute("aria-label", state.sidebarCollapsed ? "\u5c55\u5f00\u5386\u5e74\u542c\u529b\u771f\u9898\u4fa7\u680f" : "\u6536\u8d77\u5386\u5e74\u542c\u529b\u771f\u9898\u4fa7\u680f");
   }
+  function decorateCloudUi() {
+    const status = app.querySelector("[data-cloud-status]");
+    const button = app.querySelector("[data-action=\"cloud-auth\"]");
+    if (!status || !button) return;
+    if (state.cloudUser) {
+      status.textContent = state.cloudStatus === "loading" ? "\u4e91\u7aef\u8fde\u63a5\u4e2d" : state.cloudStatus === "error" ? "\u540c\u6b65\u5931\u8d25" : state.cloudStatus === "syncing" ? "\u540c\u6b65\u4e2d" : "\u4e91\u7aef\u5df2\u540c\u6b65";
+      button.textContent = "\u9000\u51fa\u540c\u6b65";
+      button.title = state.cloudUser.email || "\u9000\u51fa\u4e91\u7aef\u540c\u6b65";
+      button.disabled = state.cloudStatus === "loading";
+    } else {
+      status.textContent = state.cloudStatus === "error" ? "\u4e91\u7aef\u8fde\u63a5\u5931\u8d25" : "\u672c\u673a\u4fdd\u5b58";
+      button.textContent = "\u767b\u5f55\u540c\u6b65";
+      button.title = "\u4f7f\u7528\u90ae\u7bb1\u548c\u5bc6\u7801\u767b\u5f55\u4e91\u7aef\u540c\u6b65";
+      button.disabled = false;
+    }
+  }
   function render() {
     if (state.screen === "mock-setup") app.innerHTML = mockSetupTemplate();
     else if (state.screen === "mock") app.innerHTML = mockTemplate();
@@ -851,6 +1060,7 @@
     decorateMockSetup();
     decoratePracticeNavigation();
     decoratePracticeSidebar();
+    decorateCloudUi();
     decorateMockAudio();
     decorateTranscriptAudio();
   }
@@ -921,5 +1131,7 @@
     }
   }, { passive: false });
 
+  window.addEventListener("cet-firebase-ready", bindCloudSync);
+  bindCloudSync();
   render();
 })();

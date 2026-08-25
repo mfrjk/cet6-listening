@@ -209,6 +209,28 @@ body{background:radial-gradient(circle at 8% 0%,rgba(216,248,244,.72),transparen
   .data-tool{padding:8px 5px;font-size:10px}
 }
 
+.cloud-tools{display:flex;align-items:center;gap:6px}
+.cloud-status{color:var(--teal);font-size:10px;font-weight:850;white-space:nowrap}
+.cloud-auth{color:var(--blue)}
+.cloud-auth:disabled{opacity:.65;cursor:wait;transform:none!important}
+.cloud-auth-modal{position:fixed;inset:0;z-index:100;display:grid;place-items:center;padding:20px;background:rgba(13,53,73,.42);backdrop-filter:blur(5px)}
+.cloud-auth-dialog{width:min(420px,100%);padding:25px;border:1px solid #e4eef1;border-radius:18px;background:#fff;box-shadow:0 24px 70px rgba(10,57,78,.25);position:relative}
+.cloud-auth-dialog h2{margin:5px 0 8px;font-family:"Noto Sans SC",sans-serif;font-size:24px}
+.cloud-auth-dialog>p{margin:0 0 18px;color:var(--muted);font-size:13px;line-height:1.65}
+.cloud-auth-close{position:absolute;right:13px;top:10px;border:0;background:transparent;color:var(--muted);font-size:26px;line-height:1}
+.cloud-auth-form{display:grid;gap:12px}
+.cloud-auth-form label{display:grid;gap:6px;color:var(--blue-deep);font-size:12px;font-weight:800}
+.cloud-auth-form input{width:100%;height:42px;padding:0 12px;border:1px solid var(--line);border-radius:9px;outline:none;background:#fbfeff}
+.cloud-auth-form input:focus{border-color:#8ad6d0;box-shadow:0 0 0 3px rgba(17,175,166,.1)}
+.cloud-auth-form .button{width:100%;margin-top:2px}
+.cloud-auth-error{padding:9px 10px;border-radius:8px;background:#fff1ef;color:#b46059;font-size:12px;line-height:1.5}
+.cloud-auth-switch{margin-top:13px;border:0;background:transparent;color:var(--blue);font-size:12px;font-weight:800}
+@media(max-width:760px){
+  .cloud-tools{gap:4px}
+  .cloud-status{display:none}
+  .cloud-auth{min-height:38px;padding:8px 6px;font-size:10px}
+}
+
 /* Mobile navigation keeps every desktop destination reachable */
 @media(max-width:580px){
   .topbar{height:auto;min-height:62px;flex-wrap:wrap;align-items:center;row-gap:6px;padding:10px 14px 8px}
