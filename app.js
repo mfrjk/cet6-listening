@@ -202,6 +202,8 @@
     }
     state.cloudUser = user;
     if (!user) {
+      state.cloudLocalOwner = "guest";
+      localStorage.setItem(cloudOwnerKey, "guest");
       state.cloudStatus = "local";
       render();
       return;
