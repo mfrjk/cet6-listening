@@ -252,6 +252,24 @@
         ...(remoteRecord.deletedWrong || []).filter((key) => isFreshDeletedWrong(remoteRecord, key))
       ])];
 
+
+      const highlights = {};
+      [localRecord, remoteRecord].forEach((record) => {
+        Object.entries(record.highlights || {}).forEach(([taskId, taskHighlights]) => {
+          highlights[taskId] = highlights[taskId] || {};
+          Object.entries(taskHighlights || {}).forEach(([questionNumber, optionHighlights]) => {
+            highlights[taskId][questionNumber] = highlights[taskId][questionNumber] || {};
+            Object.entries(optionHighlights || {}).forEach(([letter, values]) => {
+              const currentValues = highlights[taskId][questionNumber][letter] || [];
+              highlights[taskId][questionNumber][letter] = [...new Set([
+                ...currentValues,
+                ...(Array.isArray(values) ? values : [])
+              ])];
+            });
+          });
+        });
+      });
+
       const scores = Object.values(completed).map((result) => Number(result?.score) || 0);
       const best = paperClearedAt || Object.keys(clearedTasks).length
         ? Math.max(...scores, 0)
@@ -261,12 +279,15 @@
         ...remoteRecord,
         completed,
         deletedWrong,
+        highlights,
         best
       };
       if (paperClearedAt) mergedRecord.clearedAt = paperClearedAt;
       else delete mergedRecord.clearedAt;
       if (Object.keys(clearedTasks).length) mergedRecord.clearedTasks = clearedTasks;
       else delete mergedRecord.clearedTasks;
+      if (Object.keys(highlights).length) mergedRecord.highlights = highlights;
+      else delete mergedRecord.highlights;
       merged[paperId] = mergedRecord;
     });
     const mergedMockWrong = mergeMockWrongSets(localData?.[mockWrongStorageKey], remoteData?.[mockWrongStorageKey]);
@@ -395,6 +416,9 @@
           const deletedWrong = Array.isArray(record.deletedWrong) ? record.deletedWrong.filter((key) => typeof key === "string") : [];
           const best = Number.isFinite(Number(record.best)) ? Number(record.best) : 0;
           imported[paperId] = { completed, deletedWrong, best };
+
+          const importedHighlights = record.highlights && typeof record.highlights === 'object' && !Array.isArray(record.highlights) ? record.highlights : {};
+          if (Object.keys(importedHighlights).length) imported[paperId].highlights = importedHighlights;
           const clearedAt = Number(record.clearedAt) || 0;
           if (clearedAt > 0) imported[paperId].clearedAt = clearedAt;
           const clearedTasks = record.clearedTasks && typeof record.clearedTasks === "object" && !Array.isArray(record.clearedTasks) ? record.clearedTasks : {};
@@ -433,7 +457,8 @@
     const hasProgress = Boolean(record.completed?.[taskId]) ||
       Object.keys(pendingAnswers || {}).length > 0 ||
       (record.deletedWrong || []).some((key) => key.startsWith(taskId + "::"));
-    if (!hasProgress) {
+    const hasHighlights = Object.keys(record.highlights?.[taskId] || {}).length > 0;
+    if (!hasProgress && !hasHighlights) {
       window.alert("本段对话暂时没有需要清除的选择。");
       return;
     }
@@ -444,6 +469,8 @@
     target.completed = { ...(target.completed || {}) };
     delete target.completed[taskId];
     target.deletedWrong = (target.deletedWrong || []).filter((key) => !key.startsWith(taskId + "::"));
+    target.highlights = { ...(target.highlights || {}) };
+    delete target.highlights[taskId];
     target.clearedTasks = { ...(target.clearedTasks || {}), [taskId]: Date.now() };
     target.best = Math.max(...Object.values(target.completed).map((result) => Number(result?.score) || 0), 0);
     if (state.paperId === paperId && task().id === taskId) {
@@ -569,7 +596,7 @@
     const selected = answers[question.number];
     const correct = question.answer;
     const status = state.submitted ? (selected === correct ? "good" : "bad") : "";
-    return `<article class="question" data-question-number="${question.number}"><div class="question-stem"><span class="question-no">${question.number}</span><p>${esc(question.stem)}</p></div><div class="options">${Object.entries(question.options).map(([letter, text]) => { const chosen = selected === letter; const cls = state.submitted ? (letter === correct ? "is-correct" : chosen ? "is-wrong" : "") : chosen ? "is-selected" : ""; return `<label class="option ${cls}"><input type="radio" name="q-${question.number}" value="${letter}" data-answer="${question.number}" ${chosen ? "checked" : ""}><span><b>${letter}.</b> ${esc(text)}</span></label>`; }).join("")}</div>${state.submitted ? `<div class="result-line ${status}">${selected === correct ? "✓ 回答正确" : `✕ 正确答案是 ${correct}${selected ? `，你的选择是 ${selected}` : "，本题未作答"}`}</div>` : ""}</article>`;
+    return `<article class="question" data-question-number="${question.number}"><div class="question-stem"><span class="question-no">${question.number}</span><p>${esc(question.stem)}</p></div><div class="options">${Object.entries(question.options).map(([letter, text]) => { const chosen = selected === letter; const cls = state.submitted ? (letter === correct ? "is-correct" : chosen ? "is-wrong" : "") : chosen ? "is-selected" : ""; return `<label class="option ${cls}" data-highlight-question="${question.number}" data-highlight-option="${letter}"><input type="radio" name="q-${question.number}" value="${letter}" data-answer="${question.number}" ${chosen ? "checked" : ""}><span><b>${letter}.</b> ${renderOptionText(text, getRealHighlightValues(question.number, letter))}</span></label>`; }).join("")}</div>${state.submitted ? `<div class="result-line ${status}">${selected === correct ? "✓ 回答正确" : `✕ 正确答案是 ${correct}${selected ? `，你的选择是 ${selected}` : "，本题未作答"}`}</div>` : ""}</article>`;
   }
   function transcriptLinesTemplate(current, mock = false) {
     return (current.transcript || []).map((line, index) => {
@@ -623,7 +650,7 @@
         questions: item.questions.map((question) => ({ ...question, number: number++ }))
       };
     });
-    state.mock = { groups, answers: {}, submitted: false, score: 0, correct: 0, bySection: {} };
+    state.mock = { groups, answers: {}, highlights: {}, submitted: false, score: 0, correct: 0, bySection: {} };
     state.mock.audioStatus = `\u6b63\u5728\u62fc\u63a5 ${state.mock.groups.length} \u6bb5\u97f3\u9891\uff0c\u8bf7\u7a0d\u5019\u2026`;
     state.screen = "mock";
     render();
@@ -646,16 +673,17 @@
   function mockQuestionTemplate(question, group, answers) {
     const id = `${group.mockId}-${question.number}`;
     const selected = answers[id];
-    return `<article class="question" data-mock-question="${id}"><div class="question-stem"><span class="question-no">${question.number}</span><p>${esc(question.stem)}</p></div><div class="options">${Object.entries(question.options).map(([letter, text]) => { const chosen = selected === letter; const cls = state.mock.submitted ? (letter === question.answer ? "is-correct" : chosen ? "is-wrong" : "") : chosen ? "is-selected" : ""; return `<label class="option ${cls}"><input type="radio" name="mock-${id}" value="${letter}" data-mock-answer="${id}" ${chosen ? "checked" : ""}><span><b>${letter}.</b> ${esc(text)}</span></label>`; }).join("")}</div>${state.mock.submitted ? `<div class="result-line ${selected === question.answer ? "good" : "bad"}">${selected === question.answer ? "✓ 回答正确" : `✕ 正确答案是 ${question.answer}${selected ? `，你的选择是 ${selected}` : "，本题未作答"}`}</div>` : ""}</article>`;
+    return `<article class="question" data-mock-question="${id}"><div class="question-stem"><span class="question-no">${question.number}</span><p>${esc(question.stem)}</p></div><div class="options">${Object.entries(question.options).map(([letter, text]) => { const chosen = selected === letter; const cls = state.mock.submitted ? (letter === question.answer ? "is-correct" : chosen ? "is-wrong" : "") : chosen ? "is-selected" : ""; return `<label class="option ${cls}" data-highlight-question="${question.number}" data-highlight-option="${letter}"><input type="radio" name="mock-${id}" value="${letter}" data-mock-answer="${id}" ${chosen ? "checked" : ""}><span><b>${letter}.</b> ${renderOptionText(text, getMockHighlightValues(id, letter))}</span></label>`; }).join("")}</div>${state.mock.submitted ? `<div class="result-line ${selected === question.answer ? "good" : "bad"}">${selected === question.answer ? "✓ 回答正确" : `✕ 正确答案是 ${question.answer}${selected ? `，你的选择是 ${selected}` : "，本题未作答"}`}</div>` : ""}</article>`;
   }
+
   function recordMockWrongAnswers(mock, submittedAt) {
     const items = [];
     for (const group of mock.groups) {
       for (const question of group.questions) {
-        const selected = mock.answers[group.mockId + "-" + question.number];
+        const selected = mock.answers[group.mockId + '-' + question.number];
         if (selected === question.answer) continue;
         items.push({
-          id: mock.id + "-" + group.groupNumber + "-" + question.number,
+          id: mock.id + '-' + group.groupNumber + '-' + question.number,
           sourcePaper: group.sourcePaper,
           sourcePaperId: group.sourcePaperId,
           sourceTaskId: group.id,
@@ -666,21 +694,25 @@
           sourceQuestionNumber: question.sourceNumber ?? question.number,
           stem: question.stem,
           answer: question.answer,
-          chosen: selected || "未作答"
+          chosen: selected || '未作答'
         });
       }
     }
     const previous = Array.isArray(saved[mockWrongStorageKey]) ? saved[mockWrongStorageKey] : [];
     const next = previous.filter((set) => set.id !== mock.id);
-    if (items.length) {
-      next.push({
-        id: mock.id,
-        source: "模拟组卷",
-        submittedAt,
-        items,
-        deletedIds: []
-      });
-    }
+    next.push({
+      id: mock.id,
+      source: '模拟组卷',
+      submittedAt,
+      score: mock.score,
+      correct: mock.correct,
+      bySection: mock.bySection,
+      groups: mock.groups,
+      answers: { ...mock.answers },
+      highlights: mock.highlights || {},
+      items,
+      deletedIds: []
+    });
     saved[mockWrongStorageKey] = next;
   }
 
@@ -720,13 +752,23 @@
     });
     return [...groups.values()].sort((a, b) => Number(b.submittedAt) - Number(a.submittedAt));
   }
+
   function mockWrongGroups() {
-    const groups = new Map();
-    mockWrongItems().forEach((item) => {
-      if (!groups.has(item.setId)) groups.set(item.setId, { id: item.setId, type: "mock", title: "随机模拟组卷", subtitle: "模拟组卷", submittedAt: item.submittedAt, items: [] });
-      groups.get(item.setId).items.push(item);
-    });
-    return [...groups.values()].sort((a, b) => Number(b.submittedAt) - Number(a.submittedAt));
+    const sets = Array.isArray(saved[mockWrongStorageKey]) ? saved[mockWrongStorageKey] : [];
+    const activeItems = mockWrongItems();
+    return sets.map((set) => {
+      const items = activeItems.filter((item) => item.setId === set.id);
+      if (!items.length) return null;
+      return {
+        id: set.id,
+        type: 'mock',
+        title: '随机模拟组卷',
+        subtitle: '模拟组卷',
+        submittedAt: set.submittedAt,
+        items,
+        history: set
+      };
+    }).filter(Boolean).sort((a, b) => Number(b.submittedAt) - Number(a.submittedAt));
   }
   function wrongGroupById(type, id) {
     return (type === "mock" ? mockWrongGroups() : realWrongGroups()).find((group) => group.id === id) || null;
@@ -755,9 +797,36 @@
     return '<section class="wrong-section"><div class="wrong-section-head"><div><div class="eyebrow" style="color:var(--teal)">' + esc(subtitle) + '</div><h2>' + esc(title) + '</h2></div><strong>' + groups.length + ' 套</strong></div>' + (groups.length ? cards : '<div class="empty">这一部分暂时没有错题</div>') + '</section>';
   }
 
+
+
+  function mockHistoryQuestionTemplate(question, group, set) {
+    const id = group.mockId + '-' + question.number;
+    const selected = set.answers?.[id];
+    const status = selected === question.answer ? 'good' : 'bad';
+    const wrongItem = (set.items || []).find((item) => item.groupNumber === group.groupNumber && Number(item.questionNumber) === Number(question.number));
+    const wrongAttrs = wrongItem ? ' mock-history-wrong-item data-mock-set-id=' + esc(set.id) + ' data-mock-wrong-id=' + esc(wrongItem.id) : '';
+    return '<article class=question' + wrongAttrs + ' data-mock-question=' + esc(id) + '><div class=question-stem><span class=question-no>' + esc(question.number) + '</span><p>' + esc(question.stem) + '</p></div><div class=options>' +
+      Object.entries(question.options || {}).map(([letter, text]) => {
+        const chosen = selected === letter;
+        const cls = letter === question.answer ? 'is-correct' : chosen ? 'is-wrong' : '';
+        return '<div class=option ' + cls + ' data-highlight-question=' + esc(question.number) + ' data-highlight-option=' + esc(letter) + '><span><b>' + esc(letter) + '.</b> ' + renderOptionText(text, getMockHighlightValues(id, letter, set)) + '</span></div>';
+      }).join('') +
+      '</div><div class=result-line ' + status + '>' + (selected === question.answer ? '✓ 回答正确' : '✕ 正确答案是 ' + esc(question.answer) + (selected ? '，你的选择是 ' + esc(selected) : '，本题未作答')) + '</div></article>';
+  }
+  function mockHistoryGroupTemplate(group, set) {
+    return '<section class=mock-history-group><div class=mock-group-head><div><p>第 ' + esc(group.groupNumber) + ' 组 · ' + esc(mockSectionName(group.section)) + '</p><h2>' + esc(group.sourcePaper || '真题') + ' / ' + esc(group.title) + '</h2></div><span class=score-pill>每题 ' + mockWeight(group.section) + ' 分</span></div><section class=question-panel><div class=question-panel-head><div><h2>' + esc(mockSectionName(group.section)) + '</h2><span>' + group.questions.length + ' 道题</span></div><span>已完成</span></div>' + group.questions.map((question) => mockHistoryQuestionTemplate(question, group, set)).join('') + '</section></section>';
+  }
+  function mockHistoryDetailTemplate(group) {
+    const set = group.history;
+    const score = Number.isFinite(Number(set.score)) ? set.score + ' / 249 分' : '已完成';
+    const breakdown = Object.entries(set.bySection || {}).map(([section, info]) => '<span>' + esc(mockSectionName(section)) + '：' + esc(info.score || 0) + ' 分</span>').join('');
+    return header('wrong', '错题回顾') +
+      '<main class=content><button type=button class=wrong-back data-action=wrong-back>← 返回错题整套列表</button><div class=wrong-header wrong-detail-header><div class=eyebrow style=color:var(--teal)>模拟组卷完整记录</div><h1>随机模拟组卷</h1><p>提交时间：' + esc(formatReviewTime(set.submittedAt)) + ' · 得分：' + esc(score) + ' · 错题：' + group.items.length + ' 道</p><div class=mock-history-summary>' + breakdown + '</div></div><div class=mock-history-list>' + set.groups.map((item) => mockHistoryGroupTemplate(item, set)).join('') + '</div></main>';
+  }
   function wrongDetailTemplate(group) {
-    return header("wrong", "错题回顾") +
-      '<main class="content"><button type="button" class="wrong-back" data-action="wrong-back">← 返回错题整套列表</button><div class="wrong-header wrong-detail-header"><div class="eyebrow" style="color:var(--teal)">' + esc(group.subtitle) + '</div><h1>' + esc(group.title) + '</h1><p>提交时间：' + esc(formatReviewTime(group.submittedAt)) + ' · 共 ' + group.items.length + ' 道错题；点击题目定位到真题原题。</p></div><div class="wrong-detail-list">' + group.items.map((item) => wrongItemCardTemplate(item, group.type)).join("") + '</div></main>';
+    if (group.type === 'mock' && group.history?.groups?.length) return mockHistoryDetailTemplate(group);
+    return header('wrong', '错题回顾') +
+      '<main class=content><button type=button class=wrong-back data-action=wrong-back>← 返回错题整套列表</button><div class=wrong-header wrong-detail-header><div class=eyebrow style=color:var(--teal)>' + esc(group.subtitle) + '</div><h1>' + esc(group.title) + '</h1><p>提交时间：' + esc(formatReviewTime(group.submittedAt)) + ' · 共 ' + group.items.length + ' 道错题；点击题目定位到真题原题。</p></div><div class=wrong-detail-list>' + group.items.map((item) => wrongItemCardTemplate(item, group.type)).join('') + '</div></main>';
   }
   function wrongTemplate() {
     if (state.wrongGroup) {
@@ -862,17 +931,80 @@
     expanded.setEnd(range.endContainer, end);
     return expanded;
   }
+
+  function getRealHighlightValues(questionNumber, letter) {
+    const currentTask = task();
+    return saved[state.paperId]?.highlights?.[currentTask?.id]?.[String(questionNumber)]?.[letter] || [];
+  }
+  function getMockHighlightValues(mockQuestionId, letter, source = state.mock) {
+    return source?.highlights?.[mockQuestionId]?.[letter] || [];
+  }
+  function renderOptionText(text, values = []) {
+    const source = String(text ?? '');
+    const ranges = [];
+    for (const rawValue of Array.isArray(values) ? values : []) {
+      const value = typeof rawValue === 'string' ? rawValue : rawValue?.text;
+      if (!value) continue;
+      let start = source.indexOf(value);
+      while (start >= 0 && ranges.some((range) => start < range.end && start + value.length > range.start)) {
+        start = source.indexOf(value, start + 1);
+      }
+      if (start >= 0) ranges.push({ start, end: start + value.length });
+    }
+    ranges.sort((a, b) => a.start - b.start);
+    if (!ranges.length) return esc(source);
+    let cursor = 0;
+    return ranges.map((range) => {
+      const before = esc(source.slice(cursor, range.start));
+      const marked = '<mark class=user-highlight>' + esc(source.slice(range.start, range.end)) + '</mark>';
+      cursor = range.end;
+      return before + marked;
+    }).join('') + esc(source.slice(cursor));
+  }
+  function highlightBucketFor(option) {
+    const questionNumber = option.dataset.highlightQuestion;
+    const letter = option.dataset.highlightOption;
+    if (!questionNumber || !letter) return null;
+    const mockQuestion = option.closest('[data-mock-question]');
+    if (mockQuestion) {
+      if (!state.mock) return null;
+      state.mock.highlights = state.mock.highlights || {};
+      state.mock.highlights[mockQuestion.dataset.mockQuestion] = state.mock.highlights[mockQuestion.dataset.mockQuestion] || {};
+      state.mock.highlights[mockQuestion.dataset.mockQuestion][letter] = state.mock.highlights[mockQuestion.dataset.mockQuestion][letter] || [];
+      return { values: state.mock.highlights[mockQuestion.dataset.mockQuestion][letter], mock: true };
+    }
+    const currentTask = task();
+    if (!currentTask || !state.paperId) return null;
+    if (!saved[state.paperId]) saved[state.paperId] = { completed: {}, best: 0 };
+    const record = saved[state.paperId];
+    record.highlights = record.highlights || {};
+    record.highlights[currentTask.id] = record.highlights[currentTask.id] || {};
+    record.highlights[currentTask.id][String(questionNumber)] = record.highlights[currentTask.id][String(questionNumber)] || {};
+    record.highlights[currentTask.id][String(questionNumber)][letter] = record.highlights[currentTask.id][String(questionNumber)][letter] || [];
+    return { values: record.highlights[currentTask.id][String(questionNumber)][letter], mock: false };
+  }
+  function saveMockHighlights() {
+    if (!state.mock?.submitted) return;
+    const sets = Array.isArray(saved[mockWrongStorageKey]) ? saved[mockWrongStorageKey] : [];
+    const target = sets.find((set) => set.id === state.mock.id);
+    if (!target) return;
+    target.highlights = state.mock.highlights || {};
+    saved[mockWrongStorageKey] = sets;
+    persist();
+  }
   function markOptionSelection(selection) {
+    if (state.screen !== 'practice' && state.screen !== 'mock') return false;
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed || !selection.toString().trim()) return false;
     const range = selection.getRangeAt(0);
     const optionFor = (node) => {
       const element = node.nodeType === 1 ? node : node.parentElement;
-      return element?.closest(".option");
+      return element?.closest('.option');
     };
     const startOption = optionFor(range.startContainer);
     const endOption = optionFor(range.endContainer);
     if (!startOption || startOption !== endOption) return false;
-
+    const highlightStore = highlightBucketFor(startOption);
+    if (!highlightStore) return false;
     const markFor = (node) => {
       const element = node.nodeType === 1 ? node : node.parentElement;
       return element?.closest('.user-highlight');
@@ -880,24 +1012,35 @@
     const startMark = markFor(range.startContainer);
     const endMark = markFor(range.endContainer);
     if (startMark && startMark === endMark) {
+      const highlightedText = (startMark.textContent || '').trim();
+      const index = highlightStore.values.indexOf(highlightedText);
+      if (index >= 0) highlightStore.values.splice(index, 1);
       const parent = startMark.parentNode;
       if (parent) {
         while (startMark.firstChild) parent.insertBefore(startMark.firstChild, startMark);
         startMark.remove();
+        if (highlightStore.mock) saveMockHighlights();
+        else persist();
         if (typeof selection.removeAllRanges === 'function') selection.removeAllRanges();
         return true;
       }
     }
+    if (startMark || endMark) return false;
     const wordRange = expandToWord(range);
-    const mark = document.createElement("mark");
-    mark.className = "user-highlight";
+    const markedText = wordRange.toString().trim();
+    if (!markedText) return false;
+    const mark = document.createElement('mark');
+    mark.className = 'user-highlight';
     try {
       mark.appendChild(wordRange.extractContents());
       wordRange.insertNode(mark);
-      if (typeof selection.removeAllRanges === "function") selection.removeAllRanges();
+      if (!highlightStore.values.includes(markedText)) highlightStore.values.push(markedText);
+      if (highlightStore.mock) saveMockHighlights();
+      else persist();
+      if (typeof selection.removeAllRanges === 'function') selection.removeAllRanges();
       return true;
     } catch (error) {
-      if (typeof selection.removeAllRanges === "function") selection.removeAllRanges();
+      if (typeof selection.removeAllRanges === 'function') selection.removeAllRanges();
       return false;
     }
   }
@@ -925,6 +1068,19 @@
     if (action === "home") { state.screen = "home"; state.submitted = false; render(); }
     if (action === "open-mock") createMock();
     if (action === "mock-new") createMock();
+    if (action === "toggle-mock-questions" && state.mock) {
+      const audio = app.querySelector('#mock-audio-player');
+      const currentTime = audio?.currentTime || 0;
+      const playing = Boolean(audio && !audio.paused);
+      state.mock.showQuestions = state.mock.showQuestions === false;
+      render();
+      const nextAudio = app.querySelector('#mock-audio-player');
+      if (nextAudio) {
+        nextAudio.currentTime = currentTime;
+        if (playing) nextAudio.play().catch(() => {});
+      }
+      return;
+    }
     if (action === "open-wrong") {
       state.wrongGroup = null;
       state.wrongReturn = null;
@@ -1013,7 +1169,7 @@
     }
   });
   app.addEventListener("contextmenu", (event) => {
-    const card = event.target.closest(".wrong-set-card, .wrong-item-card");
+    const card = event.target.closest(".wrong-set-card, .wrong-item-card, .mock-history-wrong-item");
     if (state.screen === "wrong" && card) showWrongMenu(event, card);
   });
   document.addEventListener("click", (event) => {
@@ -1046,7 +1202,7 @@
         questions: item.questions.map((question) => ({ ...question, sourceNumber: question.number, number: number++ }))
       };
     });
-    state.mock = { id: `mock-${createdAt}`, createdAt, groups, answers: {}, submitted: false, started: false, audioUrl: "", audioSegments: [], audioMode: "combined", audioStatus: "" , score: 0, correct: 0, bySection: {} };
+    state.mock = { id: `mock-${createdAt}`, createdAt, groups, answers: {}, highlights: {}, submitted: false, started: false, audioUrl: "", audioSegments: [], audioMode: "combined", audioStatus: "" , score: 0, correct: 0, bySection: {} };
     state.screen = "mock-setup";
     render();
   }
@@ -1057,6 +1213,7 @@
   function startMock() {
     if (!state.mock) return createMock();
     state.mock.started = true;
+    state.mock.showQuestions = false;
     state.mock.audioStatus = `\u6b63\u5728\u62fc\u63a5 ${state.mock.groups.length} \u6bb5\u97f3\u9891\uff0c\u8bf7\u7a0d\u5019\u2026`;
     state.mock.audioStatus = "正在拼接 7 段音频，请稍候…";
     state.mock.audioStatus = `\u6b63\u5728\u62fc\u63a5 ${state.mock.groups.length} \u6bb5\u97f3\u9891\uff0c\u8bf7\u7a0d\u5019\u2026`;
@@ -1233,8 +1390,9 @@
     const mock = state.mock;
     const total = mockTotalQuestions();
     const answered = mockAnswersCount();
+    const showQuestions = mock.showQuestions !== false;
     const summary = mock.submitted ? `<section class="score-summary"><div class="score-big">${mock.score}<small> / 249 分</small></div><p>本套模拟已完成 · ${mock.correct} / ${total} 题回答正确</p><div class="score-breakdown"><span>第一部分：${mock.bySection["Sec A"]?.score || 0} / 56</span><span>第二部分：${mock.bySection["Sec B"]?.score || 0} / 49</span><span>第三部分：${mock.bySection["Sec C"]?.score || 0} / 140</span></div></section>` : "";
-    return `${header("mock", "随机模拟练习")}<main class="mock-page"><div class="mock-heading"><div><div class="eyebrow" style="color:var(--teal)">CET-6 · RANDOM MOCK</div><h1>随机模拟练习</h1><p>连续完成全部 25 题，最后统一交卷评分。</p></div><div class="mock-actions"><button class="button ghost" data-action="mock-new">一键随机组卷</button><button class="button light" data-action="home">返回真题</button></div></div>${summary}<div class="mock-stats"><div class="mock-stat"><strong>25</strong><span>听力题总数</span></div><div class="mock-stat"><strong>8 × 7</strong><span>第一部分 · 56分</span></div><div class="mock-stat"><strong>7 × 7</strong><span>第二部分 · 49分</span></div><div class="mock-stat"><strong>10 × 14</strong><span>第三部分 · 140分</span></div></div><section class="mock-audio-card"><div><div class="audio-label">ONE AUDIO SOURCE · 连续听力</div><h2>整套模拟音源</h2><p data-mock-audio-status>${esc(mock.audioStatus || "正在准备连续音源…")}</p></div><audio id="mock-audio-player" controls preload="metadata" src="${esc(mock.audioUrl)}"></audio></section>${mock.groups.map(mockGroupTemplate).join("")}<div class="mock-submit"><div><strong>整套模拟</strong><p>已作答 ${answered} / ${total} 题${mock.submitted ? " · 可重新评分" : " · 做完全部题目后交卷"}</p></div><button class="button" data-action="submit-mock" ${!mock.submitted && answered < total ? "disabled" : ""}>${mock.submitted ? "重新评分" : "交卷并评分"}</button></div></main>`;
+    return `${header("mock", "随机模拟练习")}<main class="mock-page"><div class="mock-heading"><div><div class="eyebrow" style="color:var(--teal)">CET-6 · RANDOM MOCK</div><h1>随机模拟练习</h1><p>连续完成全部 25 题，最后统一交卷评分。</p></div><div class="mock-actions"><button class="button ghost" data-action="mock-new">一键随机组卷</button><button class="button light" data-action="home">返回真题</button></div></div>${summary}<div class="mock-stats"><div class="mock-stat"><strong>25</strong><span>听力题总数</span></div><div class="mock-stat"><strong>8 × 7</strong><span>第一部分 · 56分</span></div><div class="mock-stat"><strong>7 × 7</strong><span>第二部分 · 49分</span></div><div class="mock-stat"><strong>10 × 14</strong><span>第三部分 · 140分</span></div></div><section class="mock-audio-card"><div><div class="audio-label">ONE AUDIO SOURCE · 连续听力</div><h2>整套模拟音源</h2><p data-mock-audio-status>${esc(mock.audioStatus || "正在准备连续音源…")}</p></div><audio id="mock-audio-player" controls preload="metadata" src="${esc(mock.audioUrl)}"></audio></section><div class="mock-question-visibility"><button class="button light" data-action="toggle-mock-questions">${showQuestions ? "隐藏题目" : "显示题目"}</button><span>${showQuestions ? "题目已显示" : "听力播放中，题目已隐藏"}</span></div>${showQuestions ? mock.groups.map(mockGroupTemplate).join("") : '<div class=mock-questions-hidden>题目已隐藏，点击上方按钮显示题目。</div>'}<div class="mock-submit"><div><strong>整套模拟</strong><p>已作答 ${answered} / ${total} 题${mock.submitted ? " · 可重新评分" : " · 做完全部题目后交卷"}</p></div><button class="button" data-action="submit-mock" ${!mock.submitted && answered < total ? "disabled" : ""}>${mock.submitted ? "重新评分" : "交卷并评分"}</button></div></main>`;
   }
   function mockGroupTemplate(group) {
     const answers = state.mock.answers;
@@ -1450,7 +1608,7 @@
   let wrongLongPressCard = null;
   let wrongLongPressPoint = null;
   app.addEventListener("touchstart", (event) => {
-    const card = event.target.closest(".wrong-set-card, .wrong-item-card");
+    const card = event.target.closest(".wrong-set-card, .wrong-item-card, .mock-history-wrong-item");
     if (state.screen !== "wrong" || !card || event.touches.length !== 1) return;
     const touch = event.touches[0];
     wrongLongPressCard = card;
@@ -1475,7 +1633,7 @@
   app.addEventListener("touchend", cancelWrongLongPress, { passive: true });
   app.addEventListener("touchcancel", cancelWrongLongPress, { passive: true });
   app.addEventListener("click", (event) => {
-    const card = event.target.closest(".wrong-set-card, .wrong-item-card");
+    const card = event.target.closest(".wrong-set-card, .wrong-item-card, .mock-history-wrong-item");
     if (card?.dataset.longPressed !== "1") return;
     event.preventDefault();
     delete card.dataset.longPressed;
