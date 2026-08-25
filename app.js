@@ -29,6 +29,13 @@
     cloudConnectToken: 0
   };
 
+  // Progress can contain the complete mock-paper history. Do not send that
+  // payload for every small highlight/answer change, especially on mobile.
+  let cloudSaveTimer = 0;
+  let cloudSaveInFlight = false;
+  let cloudSaveQueued = false;
+  let lastPersistedJson = localStorage.getItem(storageKey) || "{}";
+
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
   }[char]));
@@ -96,21 +103,63 @@
   };
   const correctCount = () => data.papers.reduce((sum, item) => sum + Object.values(recordFor(item.id).completed || {}).reduce((n, entry) => n + (entry.score || 0), 0), 0);
 
-  function persist(options = {}) {
-    localStorage.setItem(storageKey, JSON.stringify(saved));
+  function cancelQueuedCloudSave() {
+    if (cloudSaveTimer) window.clearTimeout(cloudSaveTimer);
+    cloudSaveTimer = 0;
+    cloudSaveQueued = false;
+  }
+
+  async function flushCloudSave() {
+    cloudSaveTimer = 0;
+    if (!cloudSaveQueued || cloudSaveInFlight) return;
     const sync = window.CET_FIREBASE_SYNC;
-    if (options.skipCloud || !state.cloudUser || !sync?.saveProgress) return;
-    state.cloudStatus = "syncing";
-    sync.saveProgress(saved).then(() => {
-      if (state.cloudUser) {
+    const user = state.cloudUser;
+    const connectionToken = state.cloudConnectToken;
+    if (!user || !sync?.saveProgress) {
+      cloudSaveQueued = false;
+      return;
+    }
+    cloudSaveQueued = false;
+    cloudSaveInFlight = true;
+    // Snapshot once, at send time. This prevents later UI changes from
+    // mutating an in-flight Firebase write and avoids overlapping writes.
+    const payload = cloneCloudData(saved);
+    try {
+      await sync.saveProgress(payload);
+      if (state.cloudUser?.uid === user.uid && state.cloudConnectToken === connectionToken) {
         state.cloudStatus = "synced";
-        render();
+        decorateCloudUi();
       }
-    }).catch((error) => {
-      state.cloudStatus = "error";
+    } catch (error) {
+      if (state.cloudUser?.uid === user.uid && state.cloudConnectToken === connectionToken) {
+        state.cloudStatus = "error";
+        decorateCloudUi();
+      }
       console.warn("Firebase progress save failed", error);
-      render();
-    });
+    } finally {
+      cloudSaveInFlight = false;
+      if (cloudSaveQueued && state.cloudUser) {
+        cloudSaveTimer = window.setTimeout(flushCloudSave, 650);
+      }
+    }
+  }
+
+  function queueCloudSave() {
+    const sync = window.CET_FIREBASE_SYNC;
+    if (!state.cloudUser || !sync?.saveProgress) return;
+    cloudSaveQueued = true;
+    state.cloudStatus = "syncing";
+    decorateCloudUi();
+    if (cloudSaveTimer) window.clearTimeout(cloudSaveTimer);
+    cloudSaveTimer = window.setTimeout(flushCloudSave, 650);
+  }
+
+  function persist(options = {}) {
+    // Local persistence remains immediate so a refresh does not lose a newly
+    // selected answer or highlight. Cloud persistence is batched separately.
+    lastPersistedJson = JSON.stringify(saved);
+    localStorage.setItem(storageKey, lastPersistedJson);
+    if (!options.skipCloud) queueCloudSave();
   }
 
   function cloudErrorText(error) {
@@ -298,22 +347,24 @@
 
   function handleCloudRemoteData(remoteData) {
     if (!state.cloudUser || !remoteData || typeof remoteData !== "object") return;
+    const remoteJson = JSON.stringify(remoteData);
+    // Firebase echoes our own write. Skip the expensive merge/stringify/render
+    // cycle when the remote snapshot is already the locally persisted state.
+    if (remoteJson === lastPersistedJson) return;
     const merged = mergeCloudProgress(saved, remoteData);
-    const before = JSON.stringify(saved);
     const after = JSON.stringify(merged);
-    if (after !== before) {
+    if (after !== lastPersistedJson) {
       saved = merged;
       persist({ skipCloud: true });
       state.answers = {};
       state.submitted = false;
       render();
     }
-    if (JSON.stringify(remoteData) !== after) {
-      window.CET_FIREBASE_SYNC?.saveProgress(merged).catch((error) => console.warn("Firebase merge save failed", error));
-    }
+    if (remoteJson !== after) queueCloudSave();
   }
 
   async function connectCloudUser(user) {
+    if (state.cloudUser?.uid !== user?.uid) cancelQueuedCloudSave();
     const connectionToken = (state.cloudConnectToken || 0) + 1;
     state.cloudConnectToken = connectionToken;
     if (state.cloudWatchStop) {
