@@ -279,7 +279,7 @@
 
   function wrongTemplate() {
     const items = wrongItems();
-    return `${header("wrong", "错题回顾")}<main class="content"><div class="wrong-header"><div class="eyebrow" style="color:var(--teal)">REVIEW YOUR MISTAKES</div><h1>错题回顾</h1><p>${items.length ? `共 ${items.length} 道错题，点击题目回到对应听力组；右键可删除单道错题。` : "完成并提交真题练习后，错题会自动出现在这里。"}</p></div>${items.length ? items.map((item) => `<button class="wrong-card" data-wrong-paper="${esc(item.paperId)}" data-wrong-task="${item.taskId}" data-wrong-question="${item.question.number}"><div><h3>${esc(item.question.number)}. ${esc(item.question.stem)}</h3><p>${esc(item.paperTitle)} · ${esc(item.taskTitle)}</p></div><span class="wrong-meta"><span class="wrong-answer">你的答案：${esc(item.chosen)}</span><span>正确：${esc(item.question.answer)} →</span></span></button>`).join("") : '<div class="empty">还没有错题记录</div>'}</main>`;
+    return `${header("wrong", "错题回顾")}<main class="content"><div class="wrong-header"><div class="eyebrow" style="color:var(--teal)">REVIEW YOUR MISTAKES</div><h1>错题回顾</h1><p>${items.length ? `共 ${items.length} 道错题，点击题目回到对应听力组；右键或长按可删除单道错题。` : "完成并提交真题练习后，错题会自动出现在这里。"}</p></div>${items.length ? items.map((item) => `<button class="wrong-card" data-wrong-paper="${esc(item.paperId)}" data-wrong-task="${item.taskId}" data-wrong-question="${item.question.number}"><div><h3>${esc(item.question.number)}. ${esc(item.question.stem)}</h3><p>${esc(item.paperTitle)} · ${esc(item.taskTitle)}</p></div><span class="wrong-meta"><span class="wrong-answer">你的答案：${esc(item.chosen)}</span><span>正确：${esc(item.question.answer)} →</span></span></button>`).join("") : '<div class="empty">还没有错题记录</div>'}</main>`;
   }
 
   function openPaper(paperId, taskId = null, focusQuestion = null, transcript = false) {
@@ -773,6 +773,41 @@
     if (action === "export-data") exportProgressData();
     if (action === "restore-data") app.querySelector("[data-restore-file]")?.click();
   });
+  let wrongLongPressTimer = 0;
+  let wrongLongPressCard = null;
+  let wrongLongPressPoint = null;
+  app.addEventListener("touchstart", (event) => {
+    const card = event.target.closest(".wrong-card");
+    if (state.screen !== "wrong" || !card || event.touches.length !== 1) return;
+    const touch = event.touches[0];
+    wrongLongPressCard = card;
+    wrongLongPressPoint = { clientX: touch.clientX, clientY: touch.clientY };
+    wrongLongPressTimer = window.setTimeout(() => {
+      if (!wrongLongPressCard || !wrongLongPressPoint) return;
+      showWrongMenu({
+        clientX: wrongLongPressPoint.clientX,
+        clientY: wrongLongPressPoint.clientY,
+        preventDefault() {}
+      }, wrongLongPressCard);
+      wrongLongPressCard.dataset.longPressed = "1";
+    }, 650);
+  }, { passive: true });
+  const cancelWrongLongPress = () => {
+    if (wrongLongPressTimer) window.clearTimeout(wrongLongPressTimer);
+    wrongLongPressTimer = 0;
+    wrongLongPressCard = null;
+    wrongLongPressPoint = null;
+  };
+  app.addEventListener("touchmove", cancelWrongLongPress, { passive: true });
+  app.addEventListener("touchend", cancelWrongLongPress, { passive: true });
+  app.addEventListener("touchcancel", cancelWrongLongPress, { passive: true });
+  app.addEventListener("click", (event) => {
+    const card = event.target.closest(".wrong-card");
+    if (card?.dataset.longPressed !== "1") return;
+    event.preventDefault();
+    delete card.dataset.longPressed;
+  }, true);
+
   app.addEventListener("touchend", (event) => {
     const selection = window.getSelection();
     if (!selection || selection.isCollapsed || !selection.toString().trim()) return;
