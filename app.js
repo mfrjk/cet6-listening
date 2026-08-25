@@ -970,6 +970,7 @@
     state.submitted = Boolean(recordFor(paperId).completed?.[paper().tasks[state.taskIndex].id]);
     state.focusQuestion = focusQuestion ? Number(focusQuestion) : null;
     state.focusTranscript = transcript;
+    state.showTranscript = Boolean(transcript);
     state.wrongReturn = wrongReturn ? { ...wrongReturn } : null;
     state.screen = "practice";
     render();
@@ -1721,6 +1722,27 @@
     button.setAttribute("aria-expanded", String(!state.sidebarCollapsed));
     button.setAttribute("aria-label", state.sidebarCollapsed ? "\u5c55\u5f00\u5386\u5e74\u542c\u529b\u771f\u9898\u4fa7\u680f" : "\u6536\u8d77\u5386\u5e74\u542c\u529b\u771f\u9898\u4fa7\u680f");
   }
+  function decoratePracticeTranscriptLayout() {
+    if (state.screen !== "practice") return;
+    const panel = app.querySelector(".practice-main > .question-panel");
+    if (!panel) return;
+    const transcript = [...panel.children].find((node) => node.classList.contains("transcript"));
+    if (!state.showTranscript) {
+      transcript?.remove();
+      return;
+    }
+    if (!transcript) return;
+    const left = document.createElement("section");
+    left.className = "review-question-side practice-review-question-side";
+    const right = document.createElement("aside");
+    right.className = "review-transcript-side practice-review-transcript-side";
+    [...panel.children].filter((node) => node !== transcript).forEach((node) => left.append(node));
+    right.append(transcript);
+    const columns = document.createElement("div");
+    columns.className = "review-columns has-transcript practice-review-columns";
+    columns.append(left, right);
+    panel.append(columns);
+  }
   function decorateCloudUi() {
     const status = app.querySelector("[data-cloud-status]");
     const button = app.querySelector("[data-action=\"cloud-auth\"]");
@@ -1747,6 +1769,7 @@
     decorateMockSetup();
     decoratePracticeNavigation();
     decoratePracticeSidebar();
+    decoratePracticeTranscriptLayout();
     decorateCloudUi();
     decorateMockAudio();
     decorateTranscriptAudio();
