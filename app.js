@@ -474,18 +474,48 @@
     closeWrongMenu();
     render();
   }
+
+  function deleteWrongGroup(type, id) {
+    const group = wrongGroupById(type, id);
+    if (!group) return;
+    if (type === 'mock') {
+      const sets = Array.isArray(saved[mockWrongStorageKey]) ? saved[mockWrongStorageKey] : [];
+      const target = sets.find((set) => set.id === id);
+      if (!target) return;
+      target.deletedIds = [...new Set([...(target.deletedIds || []), ...group.items.map((item) => item.id)])];
+      saved[mockWrongStorageKey] = sets;
+    } else {
+      group.items.forEach((item) => {
+        if (!saved[item.paperId]) saved[item.paperId] = { completed: {}, best: 0 };
+        const record = saved[item.paperId];
+        record.deletedWrong = [...new Set([...(record.deletedWrong || []), wrongKey(item.taskId, item.question.number)])];
+      });
+    }
+    persist();
+    closeWrongMenu();
+    state.wrongGroup = null;
+    render();
+  }
+
+
   function showWrongMenu(event, card) {
     event.preventDefault();
     closeWrongMenu();
-    const menu = document.createElement("div");
-    menu.className = "wrong-context-menu";
-    menu.setAttribute("role", "menu");
-    menu.innerHTML = '<button type="button" role="menuitem"><span>✓</span> 删除这道错题</button>';
-    menu.style.left = Math.min(event.clientX, window.innerWidth - 176) + "px";
-    menu.style.top = Math.min(event.clientY, window.innerHeight - 54) + "px";
-    menu.querySelector("button").addEventListener("click", (clickEvent) => {
+    const wholeGroup = Boolean(card.dataset.wrongGroupType && card.dataset.wrongGroupId);
+    const menu = document.createElement('div');
+    menu.className = 'wrong-context-menu';
+    menu.setAttribute('role', 'menu');
+    menu.innerHTML = wholeGroup
+      ? '<button type=button role=menuitem><span>×</span> 删除整套错题</button>'
+      : '<button type=button role=menuitem><span>✓</span> 删除这道错题</button>';
+    const menuWidth = wholeGroup ? 210 : 176;
+    menu.style.left = Math.min(event.clientX, window.innerWidth - menuWidth) + 'px';
+    menu.style.top = Math.min(event.clientY, window.innerHeight - 54) + 'px';
+    menu.querySelector('button').addEventListener('click', (clickEvent) => {
       clickEvent.stopPropagation();
-      if (card.dataset.mockWrongId) {
+      if (wholeGroup) {
+        deleteWrongGroup(card.dataset.wrongGroupType, card.dataset.wrongGroupId);
+      } else if (card.dataset.mockWrongId) {
         deleteMockWrongItem(card.dataset.mockSetId, card.dataset.mockWrongId);
       } else {
         deleteWrongItem(card.dataset.wrongPaper, card.dataset.wrongTask, card.dataset.wrongQuestion);
@@ -493,6 +523,7 @@
     });
     document.body.append(menu);
   }
+
   function currentAnswers() {
     const id = task().id;
     if (Object.prototype.hasOwnProperty.call(state.answers, id)) return state.answers[id];
@@ -966,7 +997,7 @@
     }
   });
   app.addEventListener("contextmenu", (event) => {
-    const card = event.target.closest(".wrong-item-card");
+    const card = event.target.closest(".wrong-set-card, .wrong-item-card");
     if (state.screen === "wrong" && card) showWrongMenu(event, card);
   });
   document.addEventListener("click", (event) => {
@@ -1403,7 +1434,7 @@
   let wrongLongPressCard = null;
   let wrongLongPressPoint = null;
   app.addEventListener("touchstart", (event) => {
-    const card = event.target.closest(".wrong-item-card");
+    const card = event.target.closest(".wrong-set-card, .wrong-item-card");
     if (state.screen !== "wrong" || !card || event.touches.length !== 1) return;
     const touch = event.touches[0];
     wrongLongPressCard = card;
@@ -1428,7 +1459,7 @@
   app.addEventListener("touchend", cancelWrongLongPress, { passive: true });
   app.addEventListener("touchcancel", cancelWrongLongPress, { passive: true });
   app.addEventListener("click", (event) => {
-    const card = event.target.closest(".wrong-item-card");
+    const card = event.target.closest(".wrong-set-card, .wrong-item-card");
     if (card?.dataset.longPressed !== "1") return;
     event.preventDefault();
     delete card.dataset.longPressed;
