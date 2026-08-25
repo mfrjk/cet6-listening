@@ -360,7 +360,10 @@
       state.submitted = false;
       render();
     }
-    if (remoteJson !== after) queueCloudSave();
+    // Only write back when the merge actually changed our local snapshot.
+    // Firebase may return the same values with a different object-key order;
+    // that is not a data change and must not create a sync feedback loop.
+    if (remoteJson !== after && after !== lastPersistedJson) queueCloudSave();
   }
 
   async function connectCloudUser(user) {
