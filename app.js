@@ -527,62 +527,151 @@
     }
     return new Blob([output], { type: "audio/wav" });
   }
+  function isMobileAudioDevice() {
+    const userAgent = navigator.userAgent || "";
+    return /Android|iPhone|iPad|iPod|Mobile/i.test(userAgent)
+      || (Number(navigator.maxTouchPoints) > 1 && window.innerWidth <= 900);
+  }
+  function setMockAudioStatus(mock, text) {
+    mock.audioStatus = text;
+    if (state.mock !== mock) return;
+    const status = app.querySelector("[data-mock-audio-status]");
+    if (status) status.textContent = text;
+  }
+  function groupAudioDuration(group) {
+    return Number(group.transcriptTimingMeta?.duration)
+      || Number(group.duration)
+      || 0;
+  }
+  function setPlaylistTrack(mock, player, index, autoplay = false, startAt = 0) {
+    const group = mock.groups[index];
+    if (!group) return false;
+    player.pause();
+    player.dataset.playlistIndex = String(index);
+    player.dataset.playlistRetries = "0";
+    player.src = group.audio;
+    player.load();
+    if (!autoplay) return true;
+    let settled = false;
+    const playWhenReady = () => {
+      if (settled) return;
+      settled = true;
+      player.removeEventListener("loadedmetadata", playWhenReady);
+      player.removeEventListener("canplay", playWhenReady);
+      if (startAt > 0) {
+        try { player.currentTime = startAt; } catch (error) { /* metadata is still loading */ }
+      }
+      const promise = player.play();
+      if (promise?.catch) promise.catch(() => {
+        setMockAudioStatus(mock, "下一段音频已准备好，请点击播放继续整套听力");
+      });
+    };
+    player.addEventListener("loadedmetadata", playWhenReady);
+    player.addEventListener("canplay", playWhenReady);
+    if (player.readyState >= 1) window.setTimeout(playWhenReady, 0);
+    return true;
+  }
+  function bindMockPlaylist(mock, player) {
+    if (player.dataset.playlistBound === "1") return;
+    player.dataset.playlistBound = "1";
+    player.addEventListener("ended", () => {
+      if (state.mock !== mock) return;
+      const currentIndex = Number(player.dataset.playlistIndex || 0);
+      const nextIndex = currentIndex + 1;
+      if (nextIndex >= mock.groups.length) {
+        setMockAudioStatus(mock, "整套听力已播放完毕");
+        return;
+      }
+      setMockAudioStatus(mock, "正在播放第 " + (nextIndex + 1) + " / " + mock.groups.length + " 段音频");
+      setPlaylistTrack(mock, player, nextIndex, true);
+    });
+    player.addEventListener("error", () => {
+      if (state.mock !== mock) return;
+      const index = Number(player.dataset.playlistIndex || 0);
+      setMockAudioStatus(mock, "第 " + (index + 1) + " 段音频加载失败，请点击“一键随机组卷”重试");
+    });
+  }
+  function prepareMockPlaylist(mock, player, statusText) {
+    mock.audioMode = "playlist";
+    mock.audioSegments = [];
+    let offset = 0;
+    mock.groups.forEach((group) => {
+      const duration = groupAudioDuration(group);
+      const safeDuration = Number.isFinite(duration) && duration > 0 ? duration : 0;
+      mock.audioSegments.push({
+        mockId: group.mockId,
+        start: offset,
+        end: offset + safeDuration,
+        audio: group.audio
+      });
+      offset += safeDuration;
+    });
+    bindMockPlaylist(mock, player);
+    setPlaylistTrack(mock, player, 0, false);
+    setMockAudioStatus(mock, statusText || "已准备连续播放，点击播放后会自动衔接全部音频");
+  }
   async function prepareMockAudio() {
     const mock = state.mock;
     const player = app.querySelector("#mock-audio-player");
-    const status = app.querySelector("[data-mock-audio-status]");
     if (!mock || !player) return;
+    if (isMobileAudioDevice()) {
+      prepareMockPlaylist(mock, player, "手机端已准备连续播放，点击播放后会自动衔接全部音频");
+      return;
+    }
+    let context = null;
     try {
-      const context = new (window.AudioContext || window.webkitAudioContext)();
-      const decoded = [];
-      for (const group of mock.groups) {
-        const response = await fetch(group.audio);
-        const bytes = await response.arrayBuffer();
-        decoded.push(await context.decodeAudioData(bytes));
-      }
-      const sampleRate = Math.max(...decoded.map((buffer) => buffer.sampleRate));
-      const channels = 2;
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) throw new Error("audio-context-unavailable");
+      context = new AudioContextClass({ latencyHint: "playback", sampleRate: 44100 });
+      if (context.state === "suspended") await context.resume();
+      const sampleRate = context.sampleRate;
+      const channels = 1;
       const gapSamples = Math.round(sampleRate * 0.6);
-      const lengths = decoded.map((buffer) => Math.round(buffer.length * sampleRate / buffer.sampleRate));
-      const totalLength = lengths.reduce((sum, length) => sum + length, 0) + gapSamples * (decoded.length - 1);
+      const durations = mock.groups.map(groupAudioDuration);
+      if (durations.some((duration) => !Number.isFinite(duration) || duration <= 0)) throw new Error("missing-audio-duration");
+      const lengths = durations.map((duration) => Math.max(1, Math.round(duration * sampleRate)));
+      const totalLength = lengths.reduce((sum, length) => sum + length, 0) + gapSamples * (mock.groups.length - 1);
+      const estimatedBytes = totalLength * channels * 2;
+      if (estimatedBytes > 120 * 1024 * 1024) throw new Error("combined-audio-too-large");
       const combined = context.createBuffer(channels, totalLength, sampleRate);
       const segments = [];
       let offset = 0;
-      decoded.forEach((buffer, index) => {
+      for (let index = 0; index < mock.groups.length; index += 1) {
+        const group = mock.groups[index];
+        const response = await fetch(group.audio, { cache: "force-cache" });
+        if (!response.ok) throw new Error("audio-fetch-" + response.status);
+        const bytes = await response.arrayBuffer();
+        const buffer = await context.decodeAudioData(bytes);
         const length = lengths[index];
-        segments.push({ mockId: mock.groups[index].mockId, start: offset / sampleRate, end: (offset + length) / sampleRate, audio: mock.groups[index].audio });
-        for (let channel = 0; channel < channels; channel += 1) {
-          const destination = combined.getChannelData(channel);
-          const source = buffer.getChannelData(Math.min(channel, buffer.numberOfChannels - 1));
-          for (let sample = 0; sample < length; sample += 1) destination[offset + sample] = source[Math.min(source.length - 1, Math.floor(sample * source.length / length))];
+        if (Math.abs(buffer.duration - durations[index]) > 2.5) throw new Error("audio-duration-mismatch");
+        segments.push({ mockId: group.mockId, start: offset / sampleRate, end: (offset + length) / sampleRate, audio: group.audio });
+        const destination = combined.getChannelData(0);
+        const sources = Array.from({ length: buffer.numberOfChannels }, (_, channel) => buffer.getChannelData(channel));
+        for (let sample = 0; sample < length; sample += 1) {
+          const sourceIndex = Math.min(buffer.length - 1, Math.floor(sample * buffer.length / length));
+          destination[offset + sample] = sources.reduce((sum, source) => sum + source[sourceIndex], 0) / sources.length;
         }
-        offset += length + (index < decoded.length - 1 ? gapSamples : 0);
-      });
+        offset += length + (index < mock.groups.length - 1 ? gapSamples : 0);
+      }
       const url = URL.createObjectURL(audioBufferToWav(combined));
+      if (state.mock !== mock || !player.isConnected) {
+        URL.revokeObjectURL(url);
+        return;
+      }
       mock.audioUrl = url;
       mock.audioSegments = segments;
       mock.audioMode = "combined";
-      mock.audioStatus = `${mock.groups.length} \u6bb5\u97f3\u9891\u5df2\u62fc\u63a5\u4e3a\u4e00\u4e2a\u8fde\u7eed\u97f3\u6e90 \u00b7 \u53ef\u76f4\u63a5\u64ad\u653e`;
       player.src = url;
-      status.textContent = "7 段音频已拼接为一个连续音源 · 可直接播放";
-      status.textContent = `${mock.groups.length} \u6bb5\u97f3\u9891\u5df2\u62fc\u63a5\u4e3a\u4e00\u4e2a\u8fde\u7eed\u97f3\u6e90 \u00b7 \u53ef\u76f4\u63a5\u64ad\u653e`;
-      await context.close();
-      status.textContent = `${mock.groups.length} \u6bb5\u97f3\u9891\u5df2\u62fc\u63a5\u4e3a\u4e00\u4e2a\u8fde\u7eed\u97f3\u6e90 \u00b7 \u53ef\u76f4\u63a5\u64ad\u653e`;
+      player.load();
+      setMockAudioStatus(mock, mock.groups.length + " 段音频已拼接为一个连续音源 · 可直接播放");
     } catch (error) {
-      mock.audioMode = "playlist";
-      mock.audioSegments = mock.groups.map((group, index) => ({ mockId: group.mockId, start: index, end: index + 1, audio: group.audio }));
-      player.src = mock.groups[0].audio;
-      player.dataset.playlistIndex = "0";
-      status.textContent = "连续播放已准备；当前浏览器不支持本地拼接，将自动顺序播放全部音频";
-      player.addEventListener("ended", () => {
-        const next = Number(player.dataset.playlistIndex || 0) + 1;
-        if (next >= mock.groups.length) return;
-        player.dataset.playlistIndex = String(next);
-        player.src = mock.groups[next].audio;
-        player.play().catch(() => {});
-      }, { once: false });
-      status.textContent = `${mock.groups.length} \u6bb5\u97f3\u9891\u5c06\u6309\u987a\u5e8f\u64ad\u653e`;
+      if (state.mock !== mock || !player.isConnected) return;
+      prepareMockPlaylist(mock, player, "连续音源暂时无法拼接，已切换为单播放器自动连续播放");
       console.warn("Mock audio concatenation fallback", error);
+    } finally {
+      if (context) {
+        try { await context.close(); } catch (closeError) { /* already closed */ }
+      }
     }
   }
   function mockTemplate() {
@@ -601,9 +690,14 @@
     const segment = state.mock?.audioSegments?.find((item) => item.mockId === id);
     const audio = app.querySelector("#mock-audio-player");
     if (audio && segment) {
-      if (state.mock.audioMode === "combined") audio.currentTime = segment.start;
-      else { const index = state.mock.groups.findIndex((group) => group.mockId === id); audio.src = segment.audio; audio.dataset.playlistIndex = String(index); }
-      audio.play().catch(() => {});
+      if (state.mock.audioMode === "combined") {
+        audio.currentTime = segment.start;
+        audio.play().catch(() => {});
+      } else {
+        const index = state.mock.groups.findIndex((group) => group.mockId === id);
+        bindMockPlaylist(state.mock, audio);
+        setPlaylistTrack(state.mock, audio, index, true);
+      }
     }
       eventTarget.closest(".transcript")?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -661,8 +755,8 @@
       const segment = state.mock.audioSegments?.find((item) => item.mockId === id);
       if (state.mock.audioMode === "combined" && segment) playAudioAt(audio, segment.start + start);
       else if (segment) {
-        audio.src = segment.audio;
-        audio.dataset.playlistIndex = String(index);
+        bindMockPlaylist(state.mock, audio);
+        setPlaylistTrack(state.mock, audio, index, false);
         playAudioAt(audio, start);
       } else if (state.mock.groups[index]) {
         state.mock.audioMode = "playlist";
@@ -672,6 +766,12 @@
       }
     }
     container?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+  function decorateMockAudio() {
+    if (state.screen !== "mock" || !state.mock || state.mock.audioMode !== "playlist") return;
+    const player = app.querySelector("#mock-audio-player");
+    if (!player || player.dataset.playlistBound === "1") return;
+    prepareMockPlaylist(state.mock, player, state.mock.audioStatus || "已准备连续播放，点击播放后会自动衔接全部音频");
   }
   function decorateTranscriptAudio() {
     app.querySelectorAll("[data-transcript-line]").forEach((line) => {
@@ -751,6 +851,7 @@
     decorateMockSetup();
     decoratePracticeNavigation();
     decoratePracticeSidebar();
+    decorateMockAudio();
     decorateTranscriptAudio();
   }
   app.addEventListener("click", (event) => {
