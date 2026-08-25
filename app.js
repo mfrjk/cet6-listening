@@ -21,6 +21,7 @@
     showTranscript: false,
     wrongGroup: null,
     wrongReturn: null,
+    wrongTranscriptVisible: {},
     cloudUser: null,
     cloudStatus: "local",
     cloudBound: false,
@@ -883,10 +884,22 @@
       }).join('') + '</div></article>';
   }
 
-  function mockHistoryGroupTemplate(group, set) {
-    const audio = group.audio ? '<div class="audio-card mock-history-audio"><div class="audio-card-top"><div><div class="audio-label">MOCK AUDIO \u00b7 \u542c\u529b\u97f3\u9891</div><h2>\u7b2c' + esc(group.groupNumber) + '\u7ec4\u97f3\u9891</h2><p>' + esc(group.context || "") + '</p></div><span class="audio-icon">▶</span></div><audio controls preload="metadata" src="' + esc(group.audio) + '"></audio></div>' : "";
-    return '<section class="mock-history-group" data-mock-history-set-id="' + esc(set.id) + '"><div class="mock-group-head"><div><p>\u7b2c' + esc(group.groupNumber) + '\u7ec4 · ' + esc(mockSectionName(group.section)) + '</p><h2>' + esc(group.sourcePaper || "\u771f\u9898") + ' / ' + esc(group.title) + '</h2></div><span class="score-pill">\u6bcf\u9898 ' + mockWeight(group.section) + ' \u5206</span></div>' + audio + '<section class="question-panel"><div class="question-panel-head"><div><h2>' + esc(mockSectionName(group.section)) + '</h2><span>' + group.questions.length + ' \u9053\u9898</span></div><span>\u5df2\u5b8c\u6210</span></div>' + group.questions.map((question) => mockHistoryQuestionTemplate(question, group, set)).join('') + '</section></section>';
+  function reviewTranscriptTemplate(current, key) {
+    return '<div class="transcript history-transcript" data-history-transcript-audio-id="' + esc(key) + '">' +
+      '<div class="transcript-heading"><span>听力原文 · TRANSCRIPT</span><small>点击句子可跳转到对应音频</small></div>' +
+      transcriptLinesTemplate(current) + '</div>';
   }
+
+  function mockHistoryGroupTemplate(group, set) {
+    const key = set.id + '::' + group.groupNumber;
+    const showTranscript = Boolean(state.wrongTranscriptVisible[key]);
+    const toggle = '<button type="button" class="button light review-transcript-toggle" data-action="toggle-wrong-transcript" data-wrong-transcript-key="' + esc(key) + '">' + (showTranscript ? '隐藏听力原文' : '显示听力原文') + '</button>';
+    const audio = group.audio ? '<div class="audio-card mock-history-audio"><div class="audio-card-top"><div><div class="audio-label">MOCK AUDIO · 听力音频</div><h2>第' + esc(group.groupNumber) + '组音频</h2><p>' + esc(group.context || '') + '</p></div><span class="audio-icon">▶</span></div><audio controls preload="metadata" data-wrong-history-audio-id="' + esc(key) + '" src="' + esc(group.audio) + '"></audio></div>' : '';
+    const questions = '<section class="question-panel"><div class="question-panel-head"><div><h2>' + esc(mockSectionName(group.section)) + '</h2><span>' + group.questions.length + ' 道题</span></div><span>已完成</span></div>' + group.questions.map((question) => mockHistoryQuestionTemplate(question, group, set)).join('') + '</section>';
+    const transcript = showTranscript ? '<aside class="review-transcript-side">' + reviewTranscriptTemplate(group, key) + '</aside>' : '';
+    return '<section class="mock-history-group" data-mock-history-set-id="' + esc(set.id) + '"><div class="mock-group-head"><div><p>第' + esc(group.groupNumber) + '组 · ' + esc(mockSectionName(group.section)) + '</p><h2>' + esc(group.sourcePaper || '真题') + ' / ' + esc(group.title) + '</h2></div><div class="review-group-tools"><span class="score-pill">每题 ' + mockWeight(group.section) + ' 分</span>' + toggle + '</div></div>' + audio + '<div class="review-columns' + (showTranscript ? ' has-transcript' : '') + '"><section class="review-question-side">' + questions + '</section>' + transcript + '</div></section>';
+  }
+
   function mockHistoryDetailTemplate(group) {
     const set = group.history;
     const score = Number.isFinite(Number(set.score)) ? Number(set.score) : 0;
@@ -894,15 +907,45 @@
     const correct = Number(set.correct) || 0;
     const breakdown = Object.entries(set.bySection || {}).map(([section, info]) => '<span>' + esc(mockSectionName(section)) + '：' + esc(info.score || 0) + ' 分</span>').join('');
     const summary = '<section class="score-summary mock-history-score"><div class="score-big">' + esc(score) + '<small> / 249 分</small></div><p>本套模拟已完成 · ' + esc(correct) + ' / ' + esc(total) + ' 题回答正确</p><div class="score-breakdown">' + breakdown + '</div></section>';
-    return header('wrong', '\u9519\u9898\u56de\u987e') +
-      '<main class="content"><button type="button" class="wrong-back" data-action="wrong-back">← 返回错题整套列表</button><div class="wrong-header wrong-detail-header"><div class="eyebrow" style="color:var(--teal)">模拟组卷完整记录</div><h1>随机模拟组卷</h1><p>提交时间：' + esc(formatReviewTime(set.submittedAt)) + ' · 错题：' + esc(group.items.length) + ' 道</p></div>' + summary + '<div class="mock-history-list">' + set.groups.map((item) => mockHistoryGroupTemplate(item, set)).join('') + '</div></main>';
+    return header('wrong', '错题回顾') + '<main class="content"><button type="button" class="wrong-back" data-action="wrong-back">← 返回错题整套列表</button><div class="wrong-header wrong-detail-header"><div class="eyebrow" style="color:var(--teal)">模拟组卷完整记录</div><h1>随机模拟组卷</h1><p>提交时间：' + esc(formatReviewTime(set.submittedAt)) + ' · 错题：' + esc(group.items.length) + ' 道</p></div>' + summary + '<div class="mock-history-list">' + set.groups.map((item) => mockHistoryGroupTemplate(item, set)).join('') + '</div></main>';
   }
+
+  function wrongTaskForGroup(group) {
+    const first = group.items[0];
+    const paperItem = data.papers.find((item) => item.id === first?.paperId);
+    return paperItem?.tasks.find((item) => item.id === first?.taskId) || null;
+  }
+
+  function realWrongQuestionTemplate(item) {
+    const question = item.question;
+    const selected = item.chosen;
+    const sourceAttrs = ' data-wrong-paper="' + esc(item.paperId) + '" data-wrong-task="' + esc(item.taskId) + '" data-wrong-question="' + esc(question.number) + '"';
+    const highlightAttrs = ' data-wrong-history-paper-id="' + esc(item.paperId) + '" data-wrong-history-task-id="' + esc(item.taskId) + '"';
+    const options = Object.entries(question.options || {}).map(([letter, text]) => {
+      const chosen = selected === letter;
+      const cls = letter === question.answer ? 'is-correct' : chosen ? 'is-wrong' : '';
+      const values = saved[item.paperId]?.highlights?.[item.taskId]?.[String(question.number)]?.[letter] || [];
+      return '<label class="option ' + cls + '" data-highlight-question="' + esc(question.number) + '" data-highlight-option="' + esc(letter) + '"><input type="radio" name="wrong-real-' + esc(item.taskId) + '-' + esc(question.number) + '" value="' + esc(letter) + '" disabled' + (chosen ? ' checked' : '') + '><span><b>' + esc(letter) + '.</b> ' + renderOptionText(text, values) + '</span></label>';
+    }).join('');
+    return '<article class="question wrong-item-card wrong-review-question"' + sourceAttrs + highlightAttrs + '><div class="question-stem"><span class="question-no">' + esc(question.number) + '</span><p>' + esc(question.stem) + '</p></div><div class="options">' + options + '</div></article>';
+  }
+
+  function realWrongDetailTemplate(group) {
+    const current = wrongTaskForGroup(group);
+    const key = group.id;
+    const showTranscript = Boolean(state.wrongTranscriptVisible[key]);
+    const toggle = '<button type="button" class="button light review-transcript-toggle" data-action="toggle-wrong-transcript" data-wrong-transcript-key="' + esc(key) + '">' + (showTranscript ? '隐藏听力原文' : '显示听力原文') + '</button>';
+    const audio = current?.audio ? '<div class="audio-card review-audio"><div class="audio-card-top"><div><div class="audio-label">REAL PAPER AUDIO · 听力音频</div><h2>' + esc(current.title) + '</h2><p>' + esc(current.context || '') + '</p></div><span class="audio-icon">▶</span></div><audio controls preload="metadata" data-wrong-history-audio-id="' + esc(key) + '" src="' + esc(current.audio) + '"></audio></div>' : '';
+    const questionPanel = '<section class="question-panel"><div class="question-panel-head"><div><h2>真题错题</h2><span>' + group.items.length + ' 道题</span></div><span>可点击题目定位原题</span></div>' + group.items.map(realWrongQuestionTemplate).join('') + '</section>';
+    const transcript = showTranscript && current ? '<aside class="review-transcript-side">' + reviewTranscriptTemplate(current, key) + '</aside>' : '';
+    return header('wrong', '错题回顾') + '<main class="content"><button type="button" class="wrong-back" data-action="wrong-back">← 返回错题整套列表</button><div class="wrong-header wrong-detail-header"><div class="eyebrow" style="color:var(--teal)">真题练习完整记录</div><h1>' + esc(group.title) + '</h1><p>提交时间：' + esc(formatReviewTime(group.submittedAt)) + ' · 错题：' + group.items.length + ' 道</p></div>' + toggle + audio + '<div class="review-columns' + (showTranscript ? ' has-transcript' : '') + '"><section class="review-question-side">' + questionPanel + '</section>' + transcript + '</div></main>';
+  }
+
   function wrongDetailTemplate(group) {
     if (group.type === 'mock' && group.history?.groups?.length) return mockHistoryDetailTemplate(group);
-    return header('wrong', '错题回顾') +
-      '<main class=content><button type=button class=wrong-back data-action=wrong-back>← 返回错题整套列表</button><div class=wrong-header wrong-detail-header><div class=eyebrow style=color:var(--teal)>' + esc(group.subtitle) + '</div><h1>' + esc(group.title) + '</h1><p>提交时间：' + esc(formatReviewTime(group.submittedAt)) + ' · 共 ' + group.items.length + ' 道错题；点击题目定位到真题原题。</p></div><div class=wrong-detail-list>' + group.items.map((item) => wrongItemCardTemplate(item, group.type)).join('') + '</div></main>';
+    return realWrongDetailTemplate(group);
   }
-  function wrongTemplate() {
+   function wrongTemplate() {
     if (state.wrongGroup) {
       const group = wrongGroupById(state.wrongGroup.type, state.wrongGroup.id);
       if (group) return wrongDetailTemplate(group);
@@ -1051,6 +1094,19 @@
       set.highlights[questionId][letter] = set.highlights[questionId][letter] || [];
       return { values: set.highlights[questionId][letter], history: true, set };
     }
+    const realHistoryNode = option.closest("[data-wrong-history-paper-id]");
+    if (realHistoryNode) {
+      const paperId = realHistoryNode.dataset.wrongHistoryPaperId;
+      const taskId = realHistoryNode.dataset.wrongHistoryTaskId;
+      if (!paperId || !taskId) return null;
+      if (!saved[paperId]) saved[paperId] = { completed: {}, best: 0 };
+      const record = saved[paperId];
+      record.highlights = record.highlights || {};
+      record.highlights[taskId] = record.highlights[taskId] || {};
+      record.highlights[taskId][String(questionNumber)] = record.highlights[taskId][String(questionNumber)] || {};
+      record.highlights[taskId][String(questionNumber)][letter] = record.highlights[taskId][String(questionNumber)][letter] || [];
+      return { values: record.highlights[taskId][String(questionNumber)][letter], historyReal: true };
+    }
     const mockQuestion = option.closest("[data-mock-question]");
     if (mockQuestion) {
       if (!state.mock) return null;
@@ -1192,6 +1248,12 @@
     }
     if (action === "wrong-back") {
       state.wrongGroup = null;
+      render();
+      return;
+    }
+    if (action === "toggle-wrong-transcript") {
+      const key = actionTarget.dataset.wrongTranscriptKey;
+      if (key) state.wrongTranscriptVisible[key] = !state.wrongTranscriptVisible[key];
       render();
       return;
     }
@@ -1517,6 +1579,12 @@
   }
   function syncTranscriptHighlight(audio) {
     if (!audio) return;
+    if (audio.dataset.wrongHistoryAudioId) {
+      const id = audio.dataset.wrongHistoryAudioId;
+      const container = [...app.querySelectorAll(".history-transcript")].find((item) => item.dataset.historyTranscriptAudioId === id);
+      setTranscriptActive(container, audio.currentTime);
+      return;
+    }
     if (audio.id === "audio-player") {
       setTranscriptActive(app.querySelector("#transcript-current"), audio.currentTime);
       return;
@@ -1552,9 +1620,14 @@
     if (!Number.isFinite(start)) return;
     const container = line.closest(".transcript");
     const isMock = container?.classList.contains("mock-transcript");
-    const audio = app.querySelector(isMock ? "#mock-audio-player" : "#audio-player");
+    const historyAudioId = container?.dataset.historyTranscriptAudioId;
+    const audio = historyAudioId
+      ? [...app.querySelectorAll("[data-wrong-history-audio-id]")].find((item) => item.dataset.wrongHistoryAudioId === historyAudioId)
+      : app.querySelector(isMock ? "#mock-audio-player" : "#audio-player");
     if (!audio) return;
-    if (!isMock) {
+    if (historyAudioId) {
+      playAudioAt(audio, start);
+    } else if (!isMock) {
       playAudioAt(audio, start);
     } else {
       const id = container.dataset.transcriptAudioId;
@@ -1590,7 +1663,7 @@
         seekTranscriptLine(line);
       });
     });
-    app.querySelectorAll("#audio-player, #mock-audio-player").forEach((audio) => {
+    app.querySelectorAll("#audio-player, #mock-audio-player, [data-wrong-history-audio-id]").forEach((audio) => {
       if (audio.dataset.transcriptBound) return;
       audio.dataset.transcriptBound = "1";
       ["timeupdate", "seeking", "loadedmetadata", "play"].forEach((eventName) => audio.addEventListener(eventName, () => syncTranscriptHighlight(audio)));
