@@ -19,6 +19,7 @@
     optionPointer: null,
     optionDragging: false,
     showTranscript: false,
+    wrongGroup: null,
     cloudUser: null,
     cloudStatus: "local",
     cloudBound: false,
@@ -664,36 +665,69 @@
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function realWrongCardTemplate(item) {
-    return '<button class="wrong-card" data-wrong-paper="' + esc(item.paperId) + '" data-wrong-task="' + esc(item.taskId) + '" data-wrong-question="' + esc(item.question.number) + '">' +
-      '<div><div class="wrong-source-tag">真题练习</div><h3>' + esc(item.question.number) + '. ' + esc(item.question.stem) + '</h3><p>' + esc(item.paperTitle) + ' · ' + esc(item.taskTitle) + '</p></div>' +
-      '<span class="wrong-meta"><span class="wrong-answer">你的答案：' + esc(item.chosen) + '</span><span class="wrong-time">练习时间：' + esc(formatReviewTime(item.submittedAt)) + '</span><span>正确：' + esc(item.question.answer) + ' →</span></span>' +
-      '</button>';
+  function realWrongGroups() {
+    const groups = new Map();
+    wrongItems().forEach((item) => {
+      const id = item.paperId + "::" + item.taskId + "::" + item.submittedAt;
+      if (!groups.has(id)) groups.set(id, { id, type: "real", title: item.paperTitle + " · " + item.taskTitle, subtitle: "真题练习", submittedAt: item.submittedAt, items: [] });
+      groups.get(id).items.push(item);
+    });
+    return [...groups.values()].sort((a, b) => Number(b.submittedAt) - Number(a.submittedAt));
   }
-  function mockWrongCardTemplate(item) {
-    const locateAttrs = item.sourcePaperId && item.sourceTaskId && item.sourceQuestionNumber != null
-      ? ' data-wrong-paper="' + esc(item.sourcePaperId) + '" data-wrong-task="' + esc(item.sourceTaskId) + '" data-wrong-question="' + esc(item.sourceQuestionNumber) + '"'
-      : "";
-    return '<article class="wrong-card mock-wrong-card" data-mock-set-id="' + esc(item.setId) + '" data-mock-wrong-id="' + esc(item.id) + '"' + locateAttrs + '>' +
-      '<div><div class="wrong-source-tag mock">模拟组卷 · 第 ' + esc(item.groupNumber) + ' 组</div><h3>' + esc(item.questionNumber) + '. ' + esc(item.stem) + '</h3><p>' + esc(item.sourcePaper) + ' · ' + esc(item.taskTitle) + ' · ' + esc(mockSectionName(item.section)) + '</p></div>' +
-      '<span class="wrong-meta"><span class="wrong-answer">你的答案：' + esc(item.chosen) + '</span><span class="wrong-time">组卷时间：' + esc(formatReviewTime(item.submittedAt)) + '</span><span>正确：' + esc(item.answer) + '</span></span>' +
-      '</article>';
+  function mockWrongGroups() {
+    const groups = new Map();
+    mockWrongItems().forEach((item) => {
+      if (!groups.has(item.setId)) groups.set(item.setId, { id: item.setId, type: "mock", title: "随机模拟组卷", subtitle: "模拟组卷", submittedAt: item.submittedAt, items: [] });
+      groups.get(item.setId).items.push(item);
+    });
+    return [...groups.values()].sort((a, b) => Number(b.submittedAt) - Number(a.submittedAt));
   }
-  function wrongSectionTemplate(title, subtitle, items, cards) {
-    return '<section class="wrong-section"><div class="wrong-section-head"><div><div class="eyebrow" style="color:var(--teal)">' + esc(subtitle) + '</div><h2>' + esc(title) + '</h2></div><strong>' + items.length + ' 道</strong></div>' +
-      (items.length ? cards : '<div class="empty">这一部分暂时没有错题</div>') +
-      '</section>';
+  function wrongGroupById(type, id) {
+    return (type === "mock" ? mockWrongGroups() : realWrongGroups()).find((group) => group.id === id) || null;
+  }
+  function wrongSetCardTemplate(group) {
+    return '<button type="button" class="wrong-set-card" data-action="open-wrong-group" data-wrong-group-type="' + group.type + '" data-wrong-group-id="' + esc(group.id) + '">' +
+      '<div><div class="wrong-source-tag ' + (group.type === "mock" ? "mock" : "") + '">' + esc(group.subtitle) + '</div><h3>' + esc(group.title) + '</h3><p>提交时间：' + esc(formatReviewTime(group.submittedAt)) + '</p></div>' +
+      '<span class="wrong-set-count">' + group.items.length + ' 道错题 <b>›</b></span></button>';
+  }
+  function wrongItemCardTemplate(item, type) {
+    const isMock = type === "mock";
+    const paperId = isMock ? item.sourcePaperId : item.paperId;
+    const taskId = isMock ? item.sourceTaskId : item.taskId;
+    const questionNumber = isMock ? item.sourceQuestionNumber : item.question.number;
+    const locateAttrs = paperId && taskId && questionNumber != null ? ' data-action="locate-wrong" data-locate-paper="' + esc(paperId) + '" data-locate-task="' + esc(taskId) + '" data-locate-question="' + esc(questionNumber) + '"' : "";
+    const sourceAttrs = paperId && taskId && questionNumber != null ? ' data-wrong-paper="' + esc(paperId) + '" data-wrong-task="' + esc(taskId) + '" data-wrong-question="' + esc(questionNumber) + '"' : "";
+    const deleteAttrs = isMock ? ' data-mock-set-id="' + esc(item.setId) + '" data-mock-wrong-id="' + esc(item.id) + '"' : "";
+    const number = isMock ? item.questionNumber : item.question.number;
+    const stem = isMock ? item.stem : item.question.stem;
+    const answer = isMock ? item.answer : item.question.answer;
+    const source = isMock ? item.sourcePaper + " · " + item.taskTitle + " · " + mockSectionName(item.section) : item.paperTitle + " · " + item.taskTitle;
+    return '<button type="button" class="wrong-item-card wrong-card" ' + locateAttrs + sourceAttrs + deleteAttrs + '><div><div class="wrong-source-tag ' + (isMock ? "mock" : "") + '">' + (isMock ? "模拟组卷错题" : "真题练习错题") + '</div><h3>' + esc(number) + '. ' + esc(stem) + '</h3><p>' + esc(source) + '</p></div><span class="wrong-meta"><span class="wrong-answer">你的答案：' + esc(item.chosen) + '</span><span class="wrong-time">' + (isMock ? "组卷时间：" : "练习时间：") + esc(formatReviewTime(item.submittedAt)) + '</span><span>正确：' + esc(answer) + '</span></span></button>';
+  }
+  function wrongSectionTemplate(title, subtitle, groups) {
+    const cards = groups.map(wrongSetCardTemplate).join("");
+    return '<section class="wrong-section"><div class="wrong-section-head"><div><div class="eyebrow" style="color:var(--teal)">' + esc(subtitle) + '</div><h2>' + esc(title) + '</h2></div><strong>' + groups.length + ' 套</strong></div>' + (groups.length ? cards : '<div class="empty">这一部分暂时没有错题</div>') + '</section>';
+  }
+
+  function wrongDetailTemplate(group) {
+    return header("wrong", "错题回顾") +
+      '<main class="content"><button type="button" class="wrong-back" data-action="wrong-back">← 返回错题整套列表</button><div class="wrong-header wrong-detail-header"><div class="eyebrow" style="color:var(--teal)">' + esc(group.subtitle) + '</div><h1>' + esc(group.title) + '</h1><p>提交时间：' + esc(formatReviewTime(group.submittedAt)) + ' · 共 ' + group.items.length + ' 道错题；点击题目定位到真题原题。</p></div><div class="wrong-detail-list">' + group.items.map((item) => wrongItemCardTemplate(item, group.type)).join("") + '</div></main>';
   }
   function wrongTemplate() {
-    const realItems = wrongItems();
-    const mockItems = mockWrongItems();
-    const total = realItems.length + mockItems.length;
+    if (state.wrongGroup) {
+      const group = wrongGroupById(state.wrongGroup.type, state.wrongGroup.id);
+      if (group) return wrongDetailTemplate(group);
+      state.wrongGroup = null;
+    }
+    const realGroups = realWrongGroups();
+    const mockGroups = mockWrongGroups();
+    const total = realGroups.reduce((sum, group) => sum + group.items.length, 0) + mockGroups.reduce((sum, group) => sum + group.items.length, 0);
     return header("wrong", "错题回顾") +
       '<main class="content"><div class="wrong-header"><div class="eyebrow" style="color:var(--teal)">REVIEW YOUR MISTAKES</div><h1>错题回顾</h1><p>' +
-      (total ? '共 ' + total + ' 道错题；真题练习和模拟组卷分开记录，右键或长按可删除单道错题。' : '完成真题练习或模拟组卷并提交后，错题会自动出现在这里。') +
+      (total ? '共 ' + total + ' 道错题；先选择整套记录，再点击具体题目定位到真题原题。' : '完成真题练习或模拟组卷并提交后，错题会自动出现在这里。') +
       '</p></div><div class="wrong-sections">' +
-      wrongSectionTemplate("真题练习错题", "REAL PAPER PRACTICE", realItems, realItems.map(realWrongCardTemplate).join("")) +
-      wrongSectionTemplate("模拟组卷错题", "RANDOM MOCK REVIEW", mockItems, mockItems.map(mockWrongCardTemplate).join("")) +
+      wrongSectionTemplate("真题练习错题", "REAL PAPER PRACTICE", realGroups) +
+      wrongSectionTemplate("模拟组卷错题", "RANDOM MOCK REVIEW", mockGroups) +
       '</div></main>';
   }
 
@@ -828,7 +862,30 @@
     if (action === "home") { state.screen = "home"; state.submitted = false; render(); }
     if (action === "open-mock") createMock();
     if (action === "mock-new") createMock();
-    if (action === "open-wrong") { state.screen = "wrong"; render(); }
+    if (action === "open-wrong") {
+      state.wrongGroup = null;
+      state.screen = "wrong";
+      render();
+    }
+    if (action === "open-wrong-group") {
+      state.wrongGroup = {
+        type: actionTarget.dataset.wrongGroupType,
+        id: actionTarget.dataset.wrongGroupId
+      };
+      state.screen = "wrong";
+      render();
+      return;
+    }
+    if (action === "wrong-back") {
+      state.wrongGroup = null;
+      render();
+      return;
+    }
+    if (action === "locate-wrong") {
+      openPaper(actionTarget.dataset.locatePaper, actionTarget.dataset.locateTask, actionTarget.dataset.locateQuestion);
+      return;
+    }
+
     if (action === "clear-task") {
       clearTaskProgress(state.paperId, actionTarget.dataset.clearTask);
       return;
@@ -884,7 +941,7 @@
     }
   });
   app.addEventListener("contextmenu", (event) => {
-    const card = event.target.closest(".wrong-card");
+    const card = event.target.closest(".wrong-item-card");
     if (state.screen === "wrong" && card) showWrongMenu(event, card);
   });
   document.addEventListener("click", (event) => {
@@ -1321,7 +1378,7 @@
   let wrongLongPressCard = null;
   let wrongLongPressPoint = null;
   app.addEventListener("touchstart", (event) => {
-    const card = event.target.closest(".wrong-card");
+    const card = event.target.closest(".wrong-item-card");
     if (state.screen !== "wrong" || !card || event.touches.length !== 1) return;
     const touch = event.touches[0];
     wrongLongPressCard = card;
@@ -1346,7 +1403,7 @@
   app.addEventListener("touchend", cancelWrongLongPress, { passive: true });
   app.addEventListener("touchcancel", cancelWrongLongPress, { passive: true });
   app.addEventListener("click", (event) => {
-    const card = event.target.closest(".wrong-card");
+    const card = event.target.closest(".wrong-item-card");
     if (card?.dataset.longPressed !== "1") return;
     event.preventDefault();
     delete card.dataset.longPressed;
