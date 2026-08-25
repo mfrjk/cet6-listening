@@ -1,6 +1,7 @@
 (() => {
   const data = window.CET_LISTENING_DATA;
   const storageKey = "cet6-listening-progress-v1";
+  const cloudOwnerKey = storageKey + "-owner-v1";
   const app = document.getElementById("app");
   let saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
   const state = {
@@ -21,7 +22,9 @@
     cloudUser: null,
     cloudStatus: "local",
     cloudBound: false,
-    cloudWatchStop: null
+    cloudWatchStop: null,
+    cloudLocalOwner: localStorage.getItem(cloudOwnerKey) || "",
+    cloudConnectToken: 0
   };
 
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
@@ -191,6 +194,8 @@
   }
 
   async function connectCloudUser(user) {
+    const connectionToken = (state.cloudConnectToken || 0) + 1;
+    state.cloudConnectToken = connectionToken;
     if (state.cloudWatchStop) {
       state.cloudWatchStop();
       state.cloudWatchStop = null;
@@ -201,17 +206,27 @@
       render();
       return;
     }
+    const accountKey = "firebase:" + user.uid;
+    const storedOwner = localStorage.getItem(cloudOwnerKey) || "";
+    const knownOwner = storedOwner || state.cloudLocalOwner || "";
+    if (!state.cloudLocalOwner) state.cloudLocalOwner = knownOwner || accountKey;
+    const canMergeLocal = !knownOwner || knownOwner === accountKey;
     state.cloudStatus = "loading";
     render();
     const sync = window.CET_FIREBASE_SYNC;
     try {
       const payload = await sync.loadProgress();
+      if (state.cloudConnectToken !== connectionToken || state.cloudUser?.uid !== user.uid) return;
       const remoteData = payload?.data && typeof payload.data === "object" ? payload.data : null;
-      saved = mergeCloudProgress(saved, remoteData || {});
+      const localData = canMergeLocal ? saved : {};
+      saved = mergeCloudProgress(localData, remoteData || {});
+      localStorage.setItem(cloudOwnerKey, accountKey);
+      state.cloudLocalOwner = accountKey;
       persist({ skipCloud: true });
       state.answers = {};
       state.submitted = false;
       await sync.saveProgress(saved);
+      if (state.cloudConnectToken !== connectionToken || state.cloudUser?.uid !== user.uid) return;
       state.cloudStatus = "synced";
       state.cloudWatchStop = sync.watchProgress((nextPayload, error) => {
         if (error) {
@@ -225,6 +240,7 @@
       });
       render();
     } catch (error) {
+      if (state.cloudConnectToken !== connectionToken || state.cloudUser?.uid !== user.uid) return;
       state.cloudStatus = "error";
       console.warn("Firebase progress load failed", error);
       render();
