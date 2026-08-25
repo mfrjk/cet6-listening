@@ -1,0 +1,708 @@
+(() => {
+  const data = window.CET_LISTENING_DATA;
+  const storageKey = "cet6-listening-progress-v1";
+  const app = document.getElementById("app");
+  const saved = JSON.parse(localStorage.getItem(storageKey) || "{}");
+  const state = {
+    screen: "home",
+    paperId: data.papers[0].id,
+    taskIndex: 0,
+    answers: {},
+    submitted: false,
+    filter: "",
+    focusQuestion: null,
+    focusTranscript: false,
+    mock: null,
+    sidebarCollapsed: false,
+    suppressOptionClick: false,
+    optionPointer: null,
+    optionDragging: false,
+    showTranscript: false
+  };
+
+  const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
+  }[char]));
+  const paper = () => data.papers.find((item) => item.id === state.paperId) || data.papers[0];
+  const task = () => paper().tasks[state.taskIndex];
+  const recordFor = (paperId) => saved[paperId] || { completed: {}, best: 0 };
+  const completedCount = (item) => Object.keys(recordFor(item.id).completed || {}).length;
+  const allTasks = () => data.papers.flatMap((item) => item.tasks);
+  const mockTasks = () => allTasks().filter((item) => item.audioScope !== "whole-paper");
+  const allCompleted = () => data.papers.reduce((sum, item) => sum + completedCount(item), 0);
+  const wrongKey = (taskId, questionNumber) => `${taskId}::${questionNumber}`;
+  const wrongItems = () => data.papers.flatMap((item) => item.tasks.flatMap((current) => {
+    const record = recordFor(item.id);
+    const result = record.completed?.[current.id];
+    if (!result || !result.answers) return [];
+    const answers = result.answers || {};
+    const deleted = new Set(record.deletedWrong || []);
+    return current.questions.filter((question) => !deleted.has(wrongKey(current.id, question.number)) && answers[question.number] !== question.answer).map((question) => ({
+      paperId: item.id,
+      paperTitle: item.title,
+      taskId: current.id,
+      taskTitle: current.title,
+      question,
+      chosen: answers[question.number] || "未作答"
+    }));
+  }));
+  const correctCount = () => data.papers.reduce((sum, item) => sum + Object.values(recordFor(item.id).completed || {}).reduce((n, entry) => n + (entry.score || 0), 0), 0);
+
+  function persist() { localStorage.setItem(storageKey, JSON.stringify(saved)); }
+  function closeWrongMenu() { document.querySelector(".wrong-context-menu")?.remove(); }
+  function deleteWrongItem(paperId, taskId, questionNumber) {
+    if (!saved[paperId]) saved[paperId] = { completed: {}, best: 0 };
+    const record = saved[paperId];
+    record.deletedWrong = [...new Set([...(record.deletedWrong || []), wrongKey(taskId, questionNumber)])];
+    persist();
+    closeWrongMenu();
+    render();
+  }
+  function showWrongMenu(event, card) {
+    event.preventDefault();
+    closeWrongMenu();
+    const menu = document.createElement("div");
+    menu.className = "wrong-context-menu";
+    menu.setAttribute("role", "menu");
+    menu.innerHTML = `<button type="button" role="menuitem"><span>✦</span>删除这道错题</button>`;
+    menu.style.left = `${Math.min(event.clientX, window.innerWidth - 176)}px`;
+    menu.style.top = `${Math.min(event.clientY, window.innerHeight - 54)}px`;
+    menu.querySelector("button").addEventListener("click", (clickEvent) => {
+      clickEvent.stopPropagation();
+      deleteWrongItem(card.dataset.wrongPaper, card.dataset.wrongTask, card.dataset.wrongQuestion);
+    });
+    document.body.append(menu);
+  }
+  function currentAnswers() {
+    const id = task().id;
+    if (Object.prototype.hasOwnProperty.call(state.answers, id)) return state.answers[id];
+    return recordFor(state.paperId).completed?.[id]?.answers || {};
+  }
+  function nav(active) {
+    return `<nav class="topnav">
+      <button class="nav-link ${active === "practice" ? "active" : ""}" data-action="home">真题练习</button>
+      <button class="nav-link ${active === "mock" ? "active" : ""}" data-action="open-mock">模拟练习</button>
+      <button class="nav-link ${active === "wrong" ? "active" : ""}" data-action="open-wrong">错题回顾${wrongItems().length ? ` · ${wrongItems().length}` : ""}</button>
+    </nav>`;
+  }
+  function header(active = "practice", context = "") {
+    return `<header class="topbar">
+      <button class="brand" data-action="home" aria-label="返回试卷列表"><span class="brand-mark">L</span><span class="brand-name">听力自习室<small>CET-6 LISTENING LAB</small></span></button>
+      ${nav(active)}
+      <div class="top-actions"><span class="source-label">${esc(context || "陈宇昂的专属听力空间")}</span><span class="profile-name">陈宇昂</span><span class="brand-mark profile-mark" style="width:32px;height:32px;border-radius:50%;font-size:14px">陈</span></div>
+    </header>`;
+  }
+
+  function homeTemplate() {
+    const filtered = data.papers.filter((item) => item.title.toLowerCase().includes(state.filter.toLowerCase()));
+    return `${header("practice")}<section class="hero"><div class="hero-copy"><div class="eyebrow">CET-6 · LISTENING PRACTICE</div><div class="hero-welcome">陈宇昂的专属听力训练场</div><h1>把每一次听见，<br>都变成分数。</h1><p>历年六级真题听力 · 本地音频 · 即时核对 · 听力原文</p><button class="button hero-start" data-action="open-mock">开始随机模拟 →</button></div><div class="hero-stat-wrap"><div class="hero-stat"><strong>${data.papers.length}</strong><span>套真题试卷</span></div><div class="hero-stat"><strong>${allTasks().length}</strong><span>组听力材料</span></div><div class="hero-stat"><strong>${allCompleted()}<small style="font-size:12px;font-weight:500"> / ${allTasks().length}</small></strong><span>已完成听力组</span></div></div></section><main class="content"><div class="section-head"><div><h2>选择一套真题</h2><p>每组独立练习；如果想一次完成完整听力，请使用“模拟练习”。</p></div><input class="search-box" data-filter placeholder="搜索试卷，例如 24-6" value="${esc(state.filter)}"></div><div class="paper-grid">${filtered.length ? filtered.map(paperCard).join("") : '<div class="empty">没有找到对应试卷</div>'}</div></main><footer class="footer">题目与音频来源：真题墙、过级鸭、蜻蜓 FM 等公开页面 · 陈宇昂的个人离线练习空间</footer>`;
+  }
+  function paperCard(item) {
+    const done = completedCount(item);
+    const progress = Math.round(done / item.tasks.length * 100);
+    const best = recordFor(item.id).best || 0;
+    return `<article class="paper-card"><div><div class="paper-card-top"><div><div class="paper-kicker">CET-6 LISTENING</div><h3>${esc(item.title)}</h3><p class="paper-meta">${item.tasks.length} 组听力 · ${item.questionCount} 道题</p></div>${done === item.tasks.length ? '<span class="paper-badge">已完成</span>' : best ? `<span class="paper-badge">最高 ${best} 题</span>` : '<span class="paper-badge">未开始</span>'}</div></div><div><div class="paper-footer"><div class="progress-track"><i style="width:${progress}%"></i></div><span class="progress-number">${done}/${item.tasks.length} 组</span><button class="button primary" data-paper="${esc(item.id)}">${done ? "继续练习" : "开始练习"}</button></div></div></article>`;
+  }
+  function sidePapers() {
+    return `<aside class="practice-side"><button class="side-back" data-action="home">← 返回试卷列表</button><div class="side-title">历年听力真题</div>${data.papers.map((item) => `<button class="side-paper ${item.id === state.paperId ? "active" : ""}" data-side-paper="${esc(item.id)}"><span>${esc(item.title)}</span><small>${completedCount(item)}/${item.tasks.length}</small></button>`).join("")}</aside>`;
+  }
+  function practiceTemplate() {
+    const item = paper();
+    const current = task();
+    const answers = currentAnswers();
+    const result = state.submitted ? recordFor(item.id).completed?.[current.id] : null;
+    const selectedCount = Object.keys(answers).length;
+    return `${header("practice", `${item.title} · 练习中`)}<main class="practice-layout">${sidePapers()}<section class="practice-main"><div class="practice-heading"><div><div class="eyebrow" style="color:var(--teal)">LISTENING PRACTICE / ${esc(item.title)}</div><h1>${esc(current.title)}</h1><p>先完整听一遍，再选择你认为正确的答案。</p></div><div class="task-pager"><button class="button light" data-action="previous" ${state.taskIndex === 0 ? "disabled" : ""}>上一组</button><strong>${state.taskIndex + 1}</strong><span>/ ${item.tasks.length}</span><button class="button light" data-action="next" ${state.taskIndex === item.tasks.length - 1 ? "disabled" : ""}>下一组</button></div></div><div class="audio-card"><div class="audio-card-top"><div><div class="audio-label">NOW PLAYING · ${esc(current.section)}</div><h2>Questions ${current.questions[0]?.number || ""} to ${current.questions.at(-1)?.number || ""}</h2><p>${esc(current.context)}</p></div><span class="audio-icon">◖◗</span></div><audio id="audio-player" controls preload="metadata" src="${esc(current.audio)}"></audio><button type="button" class="button transcript-quick-toggle" data-action="toggle-transcript" aria-controls="transcript-current">显示 / 隐藏听力原文</button></div><section class="question-panel"><div class="question-panel-head"><div><h2>选择题</h2><span>已选择 ${selectedCount} / ${current.questions.length}</span></div>${result ? `<span class="score-pill">本组得分 ${result.score}/${result.total}</span>` : "<span>提交后显示答案</span>"}</div>${current.questions.map((question) => questionTemplate(question, answers)).join("")}<div class="question-actions"><span class="hint">${state.submitted ? "点击下方“听力原文”可回到当前听力段落。" : "每组听力可以反复播放，提交后仍可继续下一组。"}</span><div class="action-group"><button class="button ghost" data-action="reset-task">清空选择</button><button class="button primary" data-action="submit-task">${state.submitted ? "重新提交本组" : "提交本组答案"}</button></div></div>${(state.submitted || state.showTranscript) ? transcriptTemplate(current, "transcript-current") : ""}</section></section></main>`;
+  }
+  function questionTemplate(question, answers) {
+    const selected = answers[question.number];
+    const correct = question.answer;
+    const status = state.submitted ? (selected === correct ? "good" : "bad") : "";
+    return `<article class="question" data-question-number="${question.number}"><div class="question-stem"><span class="question-no">${question.number}</span><p>${esc(question.stem)}</p></div><div class="options">${Object.entries(question.options).map(([letter, text]) => { const chosen = selected === letter; const cls = state.submitted ? (letter === correct ? "is-correct" : chosen ? "is-wrong" : "") : chosen ? "is-selected" : ""; return `<label class="option ${cls}"><input type="radio" name="q-${question.number}" value="${letter}" data-answer="${question.number}" ${chosen ? "checked" : ""}><span><b>${letter}.</b> ${esc(text)}</span></label>`; }).join("")}</div>${state.submitted ? `<div class="result-line ${status}">${selected === correct ? "✓ 回答正确" : `✕ 正确答案是 ${correct}${selected ? `，你的选择是 ${selected}` : "，本题未作答"}`}</div>` : ""}</article>`;
+  }
+  function transcriptLinesTemplate(current, mock = false) {
+    return (current.transcript || []).map((line, index) => {
+      const timing = current.transcriptTiming?.[index] || {};
+      const mockAttr = mock ? ` data-transcript-audio-id="${esc(current.mockId)}"` : "";
+      const start = Number.isFinite(Number(timing.start)) ? ` data-transcript-start="${timing.start}"` : "";
+      const end = Number.isFinite(Number(timing.end)) ? ` data-transcript-end="${timing.end}"` : "";
+      return `<button type="button" class="transcript-line ${index === 0 ? "current-line" : ""}" data-transcript-line="${index}"${mockAttr}${start}${end}>${esc(line)}</button>`;
+    }).join("");
+  }
+  function transcriptTemplate(current, id, mock = false) {
+    const action = mock ? "focus-mock-transcript" : "focus-transcript";
+    const audioAttr = mock ? `data-mock-audio-id="${current.mockId}"` : "";
+    const containerAudioAttr = mock ? ` data-transcript-audio-id="${esc(current.mockId)}"` : "";
+    return `<div class="transcript ${mock ? "mock-transcript" : ""}" id="${id}"${containerAudioAttr}><button class="transcript-heading" data-action="${action}" ${audioAttr}><span>听力原文 · TRANSCRIPT</span><small>点击句子跳到这里并继续播放</small></button>${transcriptLinesTemplate(current, mock)}</div>`;
+  }
+
+  function randomPick(list, count) {
+    return [...list].sort(() => Math.random() - 0.5).slice(0, count);
+  }
+  function randomPickTotal(list, target) {
+    const candidates = [...list].sort(() => Math.random() - 0.5);
+    function search(start, remaining, picked) {
+      if (remaining === 0) return picked;
+      for (let index = start; index < candidates.length; index += 1) {
+        const item = candidates[index];
+        const size = item.questions?.length || 0;
+        if (size > remaining) continue;
+        const result = search(index + 1, remaining - size, [...picked, item]);
+        if (result) return result;
+      }
+      return null;
+    }
+    return search(0, target, []) || [];
+  }
+  function createMock() {
+    const source = mockTasks();
+    const selected = [
+      ...randomPickTotal(source.filter((item) => item.section === "Sec A"), 8),
+      ...randomPickTotal(source.filter((item) => item.section === "Sec B"), 7),
+      ...randomPickTotal(source.filter((item) => item.section === "Sec C"), 10)
+    ];
+    let number = 1;
+    const groups = selected.map((item, index) => {
+      const sourcePaper = data.papers.find((paperItem) => paperItem.tasks.some((taskItem) => taskItem.id === item.id));
+      return {
+        ...item,
+        mockId: `${item.id}-${Date.now()}-${index}`,
+        sourcePaper: sourcePaper?.title || "真题",
+        groupNumber: index + 1,
+        questions: item.questions.map((question) => ({ ...question, number: number++ }))
+      };
+    });
+    state.mock = { groups, answers: {}, submitted: false, score: 0, correct: 0, bySection: {} };
+    state.mock.audioStatus = `\u6b63\u5728\u62fc\u63a5 ${state.mock.groups.length} \u6bb5\u97f3\u9891\uff0c\u8bf7\u7a0d\u5019\u2026`;
+    state.screen = "mock";
+    render();
+  }
+  function mockTotalQuestions() { return state.mock.groups.reduce((sum, group) => sum + group.questions.length, 0); }
+  function mockAnswersCount() { return Object.keys(state.mock.answers).length; }
+  function mockWeight(section) { return section === "Sec C" ? 14 : 7; }
+  function mockSectionName(section) { return section === "Sec A" ? "第一部分 · 长对话" : section === "Sec B" ? "第二部分 · 听力篇章" : "第三部分 · 讲座 / 讲话"; }
+  function mockTemplate() {
+    const mock = state.mock;
+    const total = mockTotalQuestions();
+    const answered = mockAnswersCount();
+    const summary = mock.submitted ? `<section class="score-summary"><div class="score-big">${mock.score}<small> / 249 分</small></div><p>本套模拟已完成 · ${mock.correct} / ${total} 题回答正确</p><div class="score-breakdown"><span>第一部分：${mock.bySection["Sec A"]?.score || 0} / 56</span><span>第二部分：${mock.bySection["Sec B"]?.score || 0} / 49</span><span>第三部分：${mock.bySection["Sec C"]?.score || 0} / 140</span></div></section>` : "";
+    return `${header("mock", "随机模拟练习")}<main class="mock-page"><div class="mock-heading"><div><div class="eyebrow" style="color:var(--teal)">CET-6 · RANDOM MOCK</div><h1>随机模拟练习</h1><p>从历年真题随机抽取 7 组，连续完成全部 25 题后统一评分。</p></div><div class="mock-actions"><button class="button ghost" data-action="mock-new">换一套</button><button class="button light" data-action="home">返回真题</button></div></div>${summary}<div class="mock-stats"><div class="mock-stat"><strong>25</strong><span>听力题总数</span></div><div class="mock-stat"><strong>8 × 7</strong><span>第一部分 · 56分</span></div><div class="mock-stat"><strong>7 × 7</strong><span>第二部分 · 49分</span></div><div class="mock-stat"><strong>10 × 14</strong><span>第三部分 · 140分</span></div></div>${mock.groups.map(mockGroupTemplate).join("")}<div class="mock-submit"><div><strong>整套模拟</strong><p>已作答 ${answered} / ${total} 题${mock.submitted ? " · 可重新提交" : " · 做完全部题目后交卷"}</p></div><button class="button" data-action="submit-mock" ${!mock.submitted && answered < total ? "disabled" : ""}>${mock.submitted ? "重新评分" : "交卷并评分"}</button></div></main>`;
+  }
+  function mockGroupTemplate(group) {
+    const answers = state.mock.answers;
+    return `<section class="mock-group" id="mock-group-${group.groupNumber}"><div class="mock-group-head"><div><p>第 ${group.groupNumber} 组 · ${mockSectionName(group.section)}</p><h2>${esc(group.sourcePaper)} / ${esc(group.title)}</h2></div><span class="score-pill">每题 ${mockWeight(group.section)} 分</span></div><div class="audio-card"><div class="audio-card-top"><div><div class="audio-label">MOCK AUDIO · ${esc(group.section)}</div><h2>Questions ${group.questions[0]?.number || ""} to ${group.questions.at(-1)?.number || ""}</h2><p>${esc(group.context)}</p></div><span class="audio-icon">◖◗</span></div><audio controls preload="metadata" data-mock-audio="${group.mockId}" src="${esc(group.audio)}"></audio></div><section class="question-panel"><div class="question-panel-head"><div><h2>${mockSectionName(group.section)}</h2><span>${group.questions.length} 道题 · 每题 ${mockWeight(group.section)} 分</span></div><span>${state.mock.submitted ? "已评分" : "请作答"}</span></div>${group.questions.map((question) => mockQuestionTemplate(question, group, answers)).join("")}</section>${state.mock.submitted ? transcriptTemplate(group, `mock-transcript-${group.groupNumber}`, true) : ""}</section>`;
+  }
+  function mockQuestionTemplate(question, group, answers) {
+    const id = `${group.mockId}-${question.number}`;
+    const selected = answers[id];
+    return `<article class="question" data-mock-question="${id}"><div class="question-stem"><span class="question-no">${question.number}</span><p>${esc(question.stem)}</p></div><div class="options">${Object.entries(question.options).map(([letter, text]) => { const chosen = selected === letter; const cls = state.mock.submitted ? (letter === question.answer ? "is-correct" : chosen ? "is-wrong" : "") : chosen ? "is-selected" : ""; return `<label class="option ${cls}"><input type="radio" name="mock-${id}" value="${letter}" data-mock-answer="${id}" ${chosen ? "checked" : ""}><span><b>${letter}.</b> ${esc(text)}</span></label>`; }).join("")}</div>${state.mock.submitted ? `<div class="result-line ${selected === question.answer ? "good" : "bad"}">${selected === question.answer ? "✓ 回答正确" : `✕ 正确答案是 ${question.answer}${selected ? `，你的选择是 ${selected}` : "，本题未作答"}`}</div>` : ""}</article>`;
+  }
+  function submitMock() {
+    const mock = state.mock;
+    const bySection = {};
+    let score = 0;
+    let correct = 0;
+    for (const group of mock.groups) {
+      const section = bySection[group.section] || { score: 0, total: 0, correct: 0 };
+      for (const question of group.questions) {
+        const selected = mock.answers[`${group.mockId}-${question.number}`];
+        const weight = mockWeight(group.section);
+        section.total += weight;
+        if (selected === question.answer) { score += weight; section.score += weight; section.correct += 1; correct += 1; }
+      }
+      bySection[group.section] = section;
+    }
+    mock.score = score;
+    mock.correct = correct;
+    mock.bySection = bySection;
+    mock.submitted = true;
+    render();
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function wrongTemplate() {
+    const items = wrongItems();
+    return `${header("wrong", "错题回顾")}<main class="content"><div class="wrong-header"><div class="eyebrow" style="color:var(--teal)">REVIEW YOUR MISTAKES</div><h1>错题回顾</h1><p>${items.length ? `共 ${items.length} 道错题，点击题目回到对应听力组；右键可删除单道错题。` : "完成并提交真题练习后，错题会自动出现在这里。"}</p></div>${items.length ? items.map((item) => `<button class="wrong-card" data-wrong-paper="${esc(item.paperId)}" data-wrong-task="${item.taskId}" data-wrong-question="${item.question.number}"><div><h3>${esc(item.question.number)}. ${esc(item.question.stem)}</h3><p>${esc(item.paperTitle)} · ${esc(item.taskTitle)}</p></div><span class="wrong-meta"><span class="wrong-answer">你的答案：${esc(item.chosen)}</span><span>正确：${esc(item.question.answer)} →</span></span></button>`).join("") : '<div class="empty">还没有错题记录</div>'}</main>`;
+  }
+
+  function openPaper(paperId, taskId = null, focusQuestion = null, transcript = false) {
+    state.paperId = paperId;
+    state.taskIndex = taskId ? paper().tasks.findIndex((item) => String(item.id) === String(taskId)) : 0;
+    if (state.taskIndex < 0) state.taskIndex = 0;
+    state.submitted = Boolean(recordFor(paperId).completed?.[paper().tasks[state.taskIndex].id]);
+    state.focusQuestion = focusQuestion ? Number(focusQuestion) : null;
+    state.focusTranscript = transcript;
+    state.screen = "practice";
+    render();
+    if (state.focusQuestion || state.focusTranscript) setTimeout(focusCurrent, 80);
+  }
+  function focusCurrent() {
+    if (state.focusTranscript) document.getElementById("transcript-current")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    else if (state.focusQuestion) app.querySelector(`[data-question-number="${state.focusQuestion}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    state.focusQuestion = null;
+    state.focusTranscript = false;
+  }
+  function focusTranscript() {
+    const audio = app.querySelector("#audio-player");
+    if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
+    document.getElementById("transcript-current")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function focusMockTranscript(eventTarget) {
+    const id = eventTarget.dataset.mockAudioId;
+    const audio = app.querySelector(`[data-mock-audio="${id}"]`);
+    if (audio) { audio.currentTime = 0; audio.play().catch(() => {}); }
+    eventTarget.closest(".transcript")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function render() {
+    if (state.screen === "mock") app.innerHTML = mockTemplate();
+    else if (state.screen === "wrong") app.innerHTML = wrongTemplate();
+    else if (state.screen === "practice") app.innerHTML = practiceTemplate();
+    else app.innerHTML = homeTemplate();
+  }
+
+  app.addEventListener("input", (event) => {
+    if (!event.target.matches("[data-filter]")) return;
+    state.filter = event.target.value;
+    render();
+    const input = app.querySelector("[data-filter]");
+    input?.focus();
+    input?.setSelectionRange(input.value.length, input.value.length);
+  });
+  app.addEventListener("change", (event) => {
+    const input = event.target.closest("[data-answer]");
+    if (input && state.screen === "practice") {
+      if (!state.answers[task().id]) state.answers[task().id] = {};
+      state.answers[task().id][input.dataset.answer] = input.value;
+      app.querySelectorAll(`[data-answer="${input.dataset.answer}"]`).forEach((node) => node.closest("label")?.classList.toggle("is-selected", node.checked));
+      const counter = app.querySelector(".question-panel-head span");
+      if (counter) counter.textContent = `已选择 ${Object.keys(state.answers[task().id]).length} / ${task().questions.length}`;
+      return;
+    }
+    const mockInput = event.target.closest("[data-mock-answer]");
+    if (mockInput && state.mock) {
+      state.mock.answers[mockInput.dataset.mockAnswer] = mockInput.value;
+      app.querySelectorAll(`[data-mock-answer="${mockInput.dataset.mockAnswer}"]`).forEach((node) => node.closest("label")?.classList.toggle("is-selected", node.checked));
+      const count = app.querySelector(".mock-submit p");
+      if (count) count.textContent = `已作答 ${mockAnswersCount()} / ${mockTotalQuestions()} 题 · 做完全部题目后交卷`;
+      const submit = app.querySelector('[data-action="submit-mock"]');
+      if (submit && !state.mock.submitted) submit.disabled = mockAnswersCount() < mockTotalQuestions();
+    }
+  });
+  function expandToWord(range) {
+    if (range.startContainer !== range.endContainer || range.startContainer.nodeType !== 3) return range;
+    const text = range.startContainer.nodeValue || "";
+    const isWordChar = (char) => /[\p{L}\p{N}_'-]/u.test(char);
+    let start = range.startOffset;
+    let end = range.endOffset;
+    if (!text.slice(start, end).trim()) return range;
+    while (start > 0 && isWordChar(text[start - 1])) start -= 1;
+    while (end < text.length && isWordChar(text[end])) end += 1;
+    const expanded = range.cloneRange();
+    expanded.setStart(range.startContainer, start);
+    expanded.setEnd(range.endContainer, end);
+    return expanded;
+  }
+  function markOptionSelection(selection) {
+    if (!selection || selection.rangeCount === 0 || selection.isCollapsed || !selection.toString().trim()) return false;
+    const range = selection.getRangeAt(0);
+    const optionFor = (node) => {
+      const element = node.nodeType === 1 ? node : node.parentElement;
+      return element?.closest(".option");
+    };
+    const startOption = optionFor(range.startContainer);
+    const endOption = optionFor(range.endContainer);
+    if (!startOption || startOption !== endOption) return false;
+    const wordRange = expandToWord(range);
+    const mark = document.createElement("mark");
+    mark.className = "user-highlight";
+    try {
+      mark.appendChild(wordRange.extractContents());
+      wordRange.insertNode(mark);
+      if (typeof selection.removeAllRanges === "function") selection.removeAllRanges();
+      return true;
+    } catch (error) {
+      if (typeof selection.removeAllRanges === "function") selection.removeAllRanges();
+      return false;
+    }
+  }
+  app.addEventListener("click", (event) => {
+    if (state.suppressOptionClick) {
+      event.preventDefault();
+      state.suppressOptionClick = false;
+      return;
+    }
+    if (event.target.closest(".option") && markOptionSelection(window.getSelection())) {
+      event.preventDefault();
+      return;
+    }
+    const transcriptLine = event.target.closest("[data-transcript-line]");
+    if (transcriptLine) return seekTranscriptLine(transcriptLine);
+    const paperButton = event.target.closest("[data-paper]");
+    if (paperButton) return openPaper(paperButton.dataset.paper);
+    const sidePaper = event.target.closest("[data-side-paper]");
+    if (sidePaper) return openPaper(sidePaper.dataset.sidePaper);
+    const wrongButton = event.target.closest("[data-wrong-paper]");
+    if (wrongButton) return openPaper(wrongButton.dataset.wrongPaper, wrongButton.dataset.wrongTask, wrongButton.dataset.wrongQuestion);
+    const actionTarget = event.target.closest("[data-action]");
+    const action = actionTarget?.dataset.action;
+    if (!action) return;
+    if (action === "home") { state.screen = "home"; state.submitted = false; render(); }
+    if (action === "open-mock") createMock();
+    if (action === "mock-new") createMock();
+    if (action === "open-wrong") { state.screen = "wrong"; render(); }
+    if (action === "toggle-sidebar") { state.sidebarCollapsed = !state.sidebarCollapsed; render(); }
+    if (action === "submit-task") {
+      const current = task();
+      const answers = currentAnswers();
+      const score = current.questions.reduce((sum, question) => sum + (answers[question.number] === question.answer ? 1 : 0), 0);
+      if (!saved[state.paperId]) saved[state.paperId] = { completed: {}, best: 0 };
+      saved[state.paperId].completed[current.id] = { score, total: current.questions.length, answers: { ...answers }, at: Date.now() };
+      saved[state.paperId].deletedWrong = (saved[state.paperId].deletedWrong || []).filter((key) => !key.startsWith(`${current.id}::`));
+      saved[state.paperId].best = Math.max(saved[state.paperId].best || 0, score);
+      persist();
+      state.submitted = true;
+      render();
+    }
+    if (action === "reset-task") { state.answers[task().id] = {}; state.submitted = false; render(); }
+    if (action === "previous" && state.taskIndex > 0) { state.taskIndex -= 1; state.submitted = false; render(); }
+    if (action === "next" && state.taskIndex < paper().tasks.length - 1) { state.taskIndex += 1; state.submitted = false; render(); }
+    if (action === "focus-transcript") focusTranscript();
+    if (action === "focus-mock-transcript") focusMockTranscript(actionTarget);
+    if (action === "submit-mock") submitMock();
+  });
+  app.addEventListener("mousedown", (event) => {
+    if (event.button !== 0 || !event.target.closest(".option span")) return;
+    state.optionPointer = { x: event.clientX, y: event.clientY };
+    state.optionDragging = false;
+  });
+  app.addEventListener("mousemove", (event) => {
+    if (!state.optionPointer) return;
+    const moved = Math.abs(event.clientX - state.optionPointer.x) + Math.abs(event.clientY - state.optionPointer.y);
+    if (moved > 5) state.optionDragging = true;
+  });
+  app.addEventListener("mouseup", (event) => {
+    if (event.button !== 0) return;
+    const dragged = state.optionDragging;
+    state.optionPointer = null;
+    state.optionDragging = false;
+    const selection = window.getSelection();
+    if (dragged) {
+      state.suppressOptionClick = true;
+      if (!markOptionSelection(selection)) {
+        window.setTimeout(() => markOptionSelection(window.getSelection()), 0);
+      }
+    } else if (markOptionSelection(selection)) {
+      state.suppressOptionClick = true;
+    }
+  });
+  app.addEventListener("contextmenu", (event) => {
+    const card = event.target.closest(".wrong-card");
+    if (state.screen === "wrong" && card) showWrongMenu(event, card);
+  });
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".wrong-context-menu")) closeWrongMenu();
+  });
+
+  // Mock mode is prepared first, then started separately so the user sees
+  // the random paper only after pressing “开始考试”.
+  function disposeMockAudio() {
+    if (state.mock?.audioUrl) URL.revokeObjectURL(state.mock.audioUrl);
+  }
+  function createMock() {
+    disposeMockAudio();
+    const source = mockTasks();
+    const selected = [
+      ...randomPickTotal(source.filter((item) => item.section === "Sec A"), 8),
+      ...randomPickTotal(source.filter((item) => item.section === "Sec B"), 7),
+      ...randomPickTotal(source.filter((item) => item.section === "Sec C"), 10)
+    ];
+    let number = 1;
+    const groups = selected.map((item, index) => {
+      const sourcePaper = data.papers.find((paperItem) => paperItem.tasks.some((taskItem) => taskItem.id === item.id));
+      return {
+        ...item,
+        mockId: `${item.id}-${Date.now()}-${index}`,
+        sourcePaper: sourcePaper?.title || "真题",
+        groupNumber: index + 1,
+        questions: item.questions.map((question) => ({ ...question, number: number++ }))
+      };
+    });
+    state.mock = { groups, answers: {}, submitted: false, started: false, audioUrl: "", audioSegments: [], audioMode: "combined", audioStatus: "" , score: 0, correct: 0, bySection: {} };
+    state.screen = "mock-setup";
+    render();
+  }
+  function mockSetupTemplate() {
+    const mock = state.mock;
+    return `${header("mock", "随机模拟练习")}<main class="mock-page"><div class="mock-heading"><div><div class="eyebrow" style="color:var(--teal)">CET-6 · RANDOM MOCK</div><h1>随机模拟练习</h1><p>一键从历年真题中随机组卷，确认后开始一场完整听力考试。</p></div><div class="mock-actions"><button class="button ghost" data-action="mock-new">一键随机组卷</button><button class="button light" data-action="home">返回真题</button></div></div><section class="mock-setup"><div class="mock-setup-title"><div><strong>本次试卷已生成</strong><p>共 7 组听力、25 道题；考试开始后只保留一个连续音源。</p></div><span class="score-pill">满分 249 分</span></div><div class="mock-source-list">${mock.groups.map((group) => `<div class="mock-source-item"><span>第 ${group.groupNumber} 组 · ${mockSectionName(group.section)}</span><strong>${esc(group.sourcePaper)} / ${esc(group.title)}</strong><small>${group.questions.length} 题 · 每题 ${mockWeight(group.section)} 分</small></div>`).join("")}</div><button class="button primary mock-start" data-action="start-mock">开始考试 →</button></section></main>`;
+  }
+  function startMock() {
+    if (!state.mock) return createMock();
+    state.mock.started = true;
+    state.mock.audioStatus = `\u6b63\u5728\u62fc\u63a5 ${state.mock.groups.length} \u6bb5\u97f3\u9891\uff0c\u8bf7\u7a0d\u5019\u2026`;
+    state.mock.audioStatus = "正在拼接 7 段音频，请稍候…";
+    state.mock.audioStatus = `\u6b63\u5728\u62fc\u63a5 ${state.mock.groups.length} \u6bb5\u97f3\u9891\uff0c\u8bf7\u7a0d\u5019\u2026`;
+    state.screen = "mock";
+    render();
+    prepareMockAudio();
+  }
+  function audioBufferToWav(buffer) {
+    const channels = Math.min(2, buffer.numberOfChannels);
+    const bytesPerSample = 2;
+    const dataLength = buffer.length * channels * bytesPerSample;
+    const output = new ArrayBuffer(44 + dataLength);
+    const view = new DataView(output);
+    const write = (offset, text) => [...text].forEach((char, index) => view.setUint8(offset + index, char.charCodeAt(0)));
+    write(0, "RIFF"); view.setUint32(4, 36 + dataLength, true); write(8, "WAVE"); write(12, "fmt "); view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, channels, true); view.setUint32(24, buffer.sampleRate, true); view.setUint32(28, buffer.sampleRate * channels * bytesPerSample, true); view.setUint16(32, channels * bytesPerSample, true); view.setUint16(34, 16, true); write(36, "data"); view.setUint32(40, dataLength, true);
+    let offset = 44;
+    for (let sample = 0; sample < buffer.length; sample += 1) {
+      for (let channel = 0; channel < channels; channel += 1) {
+        const value = Math.max(-1, Math.min(1, buffer.getChannelData(channel)[sample]));
+        view.setInt16(offset, value < 0 ? value * 0x8000 : value * 0x7fff, true);
+        offset += 2;
+      }
+    }
+    return new Blob([output], { type: "audio/wav" });
+  }
+  async function prepareMockAudio() {
+    const mock = state.mock;
+    const player = app.querySelector("#mock-audio-player");
+    const status = app.querySelector("[data-mock-audio-status]");
+    if (!mock || !player) return;
+    try {
+      const context = new (window.AudioContext || window.webkitAudioContext)();
+      const decoded = [];
+      for (const group of mock.groups) {
+        const response = await fetch(group.audio);
+        const bytes = await response.arrayBuffer();
+        decoded.push(await context.decodeAudioData(bytes));
+      }
+      const sampleRate = Math.max(...decoded.map((buffer) => buffer.sampleRate));
+      const channels = 2;
+      const gapSamples = Math.round(sampleRate * 0.6);
+      const lengths = decoded.map((buffer) => Math.round(buffer.length * sampleRate / buffer.sampleRate));
+      const totalLength = lengths.reduce((sum, length) => sum + length, 0) + gapSamples * (decoded.length - 1);
+      const combined = context.createBuffer(channels, totalLength, sampleRate);
+      const segments = [];
+      let offset = 0;
+      decoded.forEach((buffer, index) => {
+        const length = lengths[index];
+        segments.push({ mockId: mock.groups[index].mockId, start: offset / sampleRate, end: (offset + length) / sampleRate, audio: mock.groups[index].audio });
+        for (let channel = 0; channel < channels; channel += 1) {
+          const destination = combined.getChannelData(channel);
+          const source = buffer.getChannelData(Math.min(channel, buffer.numberOfChannels - 1));
+          for (let sample = 0; sample < length; sample += 1) destination[offset + sample] = source[Math.min(source.length - 1, Math.floor(sample * source.length / length))];
+        }
+        offset += length + (index < decoded.length - 1 ? gapSamples : 0);
+      });
+      const url = URL.createObjectURL(audioBufferToWav(combined));
+      mock.audioUrl = url;
+      mock.audioSegments = segments;
+      mock.audioMode = "combined";
+      mock.audioStatus = `${mock.groups.length} \u6bb5\u97f3\u9891\u5df2\u62fc\u63a5\u4e3a\u4e00\u4e2a\u8fde\u7eed\u97f3\u6e90 \u00b7 \u53ef\u76f4\u63a5\u64ad\u653e`;
+      player.src = url;
+      status.textContent = "7 段音频已拼接为一个连续音源 · 可直接播放";
+      status.textContent = `${mock.groups.length} \u6bb5\u97f3\u9891\u5df2\u62fc\u63a5\u4e3a\u4e00\u4e2a\u8fde\u7eed\u97f3\u6e90 \u00b7 \u53ef\u76f4\u63a5\u64ad\u653e`;
+      await context.close();
+      status.textContent = `${mock.groups.length} \u6bb5\u97f3\u9891\u5df2\u62fc\u63a5\u4e3a\u4e00\u4e2a\u8fde\u7eed\u97f3\u6e90 \u00b7 \u53ef\u76f4\u63a5\u64ad\u653e`;
+    } catch (error) {
+      mock.audioMode = "playlist";
+      mock.audioSegments = mock.groups.map((group, index) => ({ mockId: group.mockId, start: index, end: index + 1, audio: group.audio }));
+      player.src = mock.groups[0].audio;
+      player.dataset.playlistIndex = "0";
+      status.textContent = "连续播放已准备；当前浏览器不支持本地拼接，将自动顺序播放全部音频";
+      player.addEventListener("ended", () => {
+        const next = Number(player.dataset.playlistIndex || 0) + 1;
+        if (next >= mock.groups.length) return;
+        player.dataset.playlistIndex = String(next);
+        player.src = mock.groups[next].audio;
+        player.play().catch(() => {});
+      }, { once: false });
+      status.textContent = `${mock.groups.length} \u6bb5\u97f3\u9891\u5c06\u6309\u987a\u5e8f\u64ad\u653e`;
+      console.warn("Mock audio concatenation fallback", error);
+    }
+  }
+  function mockTemplate() {
+    const mock = state.mock;
+    const total = mockTotalQuestions();
+    const answered = mockAnswersCount();
+    const summary = mock.submitted ? `<section class="score-summary"><div class="score-big">${mock.score}<small> / 249 分</small></div><p>本套模拟已完成 · ${mock.correct} / ${total} 题回答正确</p><div class="score-breakdown"><span>第一部分：${mock.bySection["Sec A"]?.score || 0} / 56</span><span>第二部分：${mock.bySection["Sec B"]?.score || 0} / 49</span><span>第三部分：${mock.bySection["Sec C"]?.score || 0} / 140</span></div></section>` : "";
+    return `${header("mock", "随机模拟练习")}<main class="mock-page"><div class="mock-heading"><div><div class="eyebrow" style="color:var(--teal)">CET-6 · RANDOM MOCK</div><h1>随机模拟练习</h1><p>连续完成全部 25 题，最后统一交卷评分。</p></div><div class="mock-actions"><button class="button ghost" data-action="mock-new">一键随机组卷</button><button class="button light" data-action="home">返回真题</button></div></div>${summary}<div class="mock-stats"><div class="mock-stat"><strong>25</strong><span>听力题总数</span></div><div class="mock-stat"><strong>8 × 7</strong><span>第一部分 · 56分</span></div><div class="mock-stat"><strong>7 × 7</strong><span>第二部分 · 49分</span></div><div class="mock-stat"><strong>10 × 14</strong><span>第三部分 · 140分</span></div></div><section class="mock-audio-card"><div><div class="audio-label">ONE AUDIO SOURCE · 连续听力</div><h2>整套模拟音源</h2><p data-mock-audio-status>${esc(mock.audioStatus || "正在准备连续音源…")}</p></div><audio id="mock-audio-player" controls preload="metadata" src="${esc(mock.audioUrl)}"></audio></section>${mock.groups.map(mockGroupTemplate).join("")}<div class="mock-submit"><div><strong>整套模拟</strong><p>已作答 ${answered} / ${total} 题${mock.submitted ? " · 可重新评分" : " · 做完全部题目后交卷"}</p></div><button class="button" data-action="submit-mock" ${!mock.submitted && answered < total ? "disabled" : ""}>${mock.submitted ? "重新评分" : "交卷并评分"}</button></div></main>`;
+  }
+  function mockGroupTemplate(group) {
+    const answers = state.mock.answers;
+    return `<section class="mock-group" id="mock-group-${group.groupNumber}"><div class="mock-group-head"><div><p>第 ${group.groupNumber} 组 · ${mockSectionName(group.section)}</p><h2>${esc(group.sourcePaper)} / ${esc(group.title)}</h2></div><span class="score-pill">每题 ${mockWeight(group.section)} 分</span></div><section class="question-panel"><div class="question-panel-head"><div><h2>${mockSectionName(group.section)}</h2><span>${group.questions.length} 道题 · 每题 ${mockWeight(group.section)} 分</span></div><span>${state.mock.submitted ? "已评分" : "请作答"}</span></div>${group.questions.map((question) => mockQuestionTemplate(question, group, answers)).join("")}</section>${state.mock.submitted ? transcriptTemplate(group, `mock-transcript-${group.groupNumber}`, true) : ""}</section>`;
+  }
+  function focusMockTranscript(eventTarget) {
+    const id = eventTarget.dataset.mockAudioId;
+    const segment = state.mock?.audioSegments?.find((item) => item.mockId === id);
+    const audio = app.querySelector("#mock-audio-player");
+    if (audio && segment) {
+      if (state.mock.audioMode === "combined") audio.currentTime = segment.start;
+      else { const index = state.mock.groups.findIndex((group) => group.mockId === id); audio.src = segment.audio; audio.dataset.playlistIndex = String(index); }
+      audio.play().catch(() => {});
+    }
+      eventTarget.closest(".transcript")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function setTranscriptActive(container, time) {
+    if (!container || !Number.isFinite(time)) return;
+    const lines = [...container.querySelectorAll("[data-transcript-line]")];
+    let active = lines.find((line) => time >= Number(line.dataset.transcriptStart) && time < Number(line.dataset.transcriptEnd));
+    if (!active && lines.length && time >= Number(lines.at(-1).dataset.transcriptStart)) active = lines.at(-1);
+    lines.forEach((line) => line.classList.toggle("current-line", line === active));
+  }
+  function syncTranscriptHighlight(audio) {
+    if (!audio) return;
+    if (audio.id === "audio-player") {
+      setTranscriptActive(app.querySelector("#transcript-current"), audio.currentTime);
+      return;
+    }
+    if (audio.id !== "mock-audio-player" || !state.mock) return;
+    const currentTime = audio.currentTime;
+    app.querySelectorAll(".mock-transcript[data-transcript-audio-id]").forEach((container) => {
+      const id = container.dataset.transcriptAudioId;
+      const index = state.mock.groups.findIndex((group) => group.mockId === id);
+      const segment = state.mock.audioSegments?.find((item) => item.mockId === id);
+      let relative = NaN;
+      if (state.mock.audioMode === "combined" && segment && currentTime >= segment.start && currentTime <= segment.end) relative = currentTime - segment.start;
+      if (state.mock.audioMode === "playlist" && Number(audio.dataset.playlistIndex) === index) relative = currentTime;
+      setTranscriptActive(container, relative);
+    });
+  }
+  function playAudioAt(audio, time) {
+    const play = () => {
+      const target = Math.max(0, Number(time) || 0);
+      audio.pause();
+      try { audio.currentTime = target; } catch (error) { /* metadata is still loading */ }
+      window.setTimeout(() => {
+        try { if (Math.abs(audio.currentTime - target) > 0.35) audio.currentTime = target; } catch (error) { /* media is still loading */ }
+        syncTranscriptHighlight(audio);
+        audio.play().catch(() => {});
+      }, 0);
+    };
+    if (audio.readyState >= 1) play();
+    else audio.addEventListener("loadedmetadata", play, { once: true });
+  }
+  function seekTranscriptLine(line) {
+    const start = Number(line.dataset.transcriptStart);
+    if (!Number.isFinite(start)) return;
+    const container = line.closest(".transcript");
+    const isMock = container?.classList.contains("mock-transcript");
+    const audio = app.querySelector(isMock ? "#mock-audio-player" : "#audio-player");
+    if (!audio) return;
+    if (!isMock) {
+      playAudioAt(audio, start);
+    } else {
+      const id = container.dataset.transcriptAudioId;
+      const index = state.mock.groups.findIndex((group) => group.mockId === id);
+      const segment = state.mock.audioSegments?.find((item) => item.mockId === id);
+      if (state.mock.audioMode === "combined" && segment) playAudioAt(audio, segment.start + start);
+      else if (segment) {
+        audio.src = segment.audio;
+        audio.dataset.playlistIndex = String(index);
+        playAudioAt(audio, start);
+      } else if (state.mock.groups[index]) {
+        state.mock.audioMode = "playlist";
+        audio.src = state.mock.groups[index].audio;
+        audio.dataset.playlistIndex = String(index);
+        playAudioAt(audio, start);
+      }
+    }
+    container?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+  function decorateTranscriptAudio() {
+    app.querySelectorAll("[data-transcript-line]").forEach((line) => {
+      if (line.dataset.transcriptClickBound) return;
+      line.dataset.transcriptClickBound = "1";
+      line.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        seekTranscriptLine(line);
+      });
+    });
+    app.querySelectorAll("#audio-player, #mock-audio-player").forEach((audio) => {
+      if (audio.dataset.transcriptBound) return;
+      audio.dataset.transcriptBound = "1";
+      ["timeupdate", "seeking", "loadedmetadata", "play"].forEach((eventName) => audio.addEventListener(eventName, () => syncTranscriptHighlight(audio)));
+      syncTranscriptHighlight(audio);
+    });
+  }
+  function decoratePracticeAudio() {
+    if (state.screen !== "practice") return;
+    const current = task();
+    if (!current || current.audioScope !== "whole-paper") return;
+    const audio = app.querySelector("#audio-player");
+    if (!audio || audio.parentElement.querySelector(".audio-note")) return;
+    const note = document.createElement("p");
+    note.className = "audio-note";
+    note.textContent = current.audioNote || "本地音频为整套录音；题目与原文已按 Section A / B / C 拆分。";
+    audio.parentElement.append(note);
+  }
+  function decorateMockSetup() {
+    if (state.screen !== "mock-setup") return;
+    const setup = app.querySelector(".mock-setup");
+    if (!setup || setup.querySelector(".mock-scope-note")) return;
+    const note = document.createElement("p");
+    note.className = "mock-scope-note";
+    note.textContent = `\u6bcf\u4e2a\u90e8\u5206\u6309 8 / 7 / 10 \u9898\u968f\u673a\u7ec4\u5377\uff1b\u97f3\u9891\u5df2\u5207\u5206\u4e3a\u72ec\u7acb\u7247\u6bb5\uff0c\u5f00\u59cb\u8003\u8bd5\u540e\u4f1a\u62fc\u63a5\u4e3a\u4e00\u4e2a\u8fde\u7eed\u97f3\u6e90\u3002`;
+    note.textContent = "随机组卷使用具有精确分段音频的任务；新增的整套录音试卷仍可在真题练习中按 Section A / B / C 使用。";
+    setup.insertBefore(note, setup.querySelector(".mock-source-list"));
+    note.textContent = `\u6bcf\u4e2a\u90e8\u5206\u6309 8 / 7 / 10 \u9898\u968f\u673a\u7ec4\u5377\uff1b\u97f3\u9891\u5df2\u5207\u5206\u4e3a\u72ec\u7acb\u7247\u6bb5\uff0c\u5f00\u59cb\u8003\u8bd5\u540e\u4f1a\u62fc\u63a5\u4e3a\u4e00\u4e2a\u8fde\u7eed\u97f3\u6e90\u3002`;
+    const summary = setup.querySelector(".mock-setup-title p");
+    if (summary) summary.textContent = `\u5171 ${state.mock.groups.length} \u7ec4\u542c\u529b\u3001\u0032\u0035 \u9053\u9898\uff1b\u8003\u8bd5\u5f00\u59cb\u540e\u53ea\u4fdd\u7559\u4e00\u4e2a\u8fde\u7eed\u97f3\u6e90\u3002`;
+  }
+  function decoratePracticeNavigation() {
+    if (state.screen !== "practice") return;
+    const panel = app.querySelector(".question-panel");
+    if (!panel || panel.querySelector(".task-nav-bottom")) return;
+    const nav = document.createElement("div");
+    nav.className = "task-nav-bottom";
+    nav.innerHTML = `<button class="button light" data-action="previous" ${state.taskIndex === 0 ? "disabled" : ""}>\u4e0a\u4e00\u7ec4</button><strong>\u7b2c ${state.taskIndex + 1} / ${paper().tasks.length} \u7ec4</strong><button class="button primary" data-action="next" ${state.taskIndex === paper().tasks.length - 1 ? "disabled" : ""}>\u4e0b\u4e00\u7ec4</button>`;
+    panel.append(nav);
+  }
+  function decoratePracticeSidebar() {
+    if (state.screen !== "practice") return;
+    const layout = app.querySelector(".practice-layout");
+    const heading = app.querySelector(".practice-heading");
+    if (!layout || !heading) return;
+    layout.classList.toggle("sidebar-collapsed", state.sidebarCollapsed);
+    let tools = heading.querySelector(".practice-tools");
+    if (!tools) {
+      tools = document.createElement("div");
+      tools.className = "practice-tools";
+      tools.innerHTML = `<button class="button light sidebar-toggle" data-action="toggle-sidebar" type="button"></button>`;
+      heading.append(tools);
+    }
+    const button = tools.querySelector(".sidebar-toggle");
+    button.textContent = state.sidebarCollapsed ? "\u5c55\u5f00\u9898\u5e93" : "\u6536\u8d77\u9898\u5e93";
+    button.setAttribute("aria-expanded", String(!state.sidebarCollapsed));
+    button.setAttribute("aria-label", state.sidebarCollapsed ? "\u5c55\u5f00\u5386\u5e74\u542c\u529b\u771f\u9898\u4fa7\u680f" : "\u6536\u8d77\u5386\u5e74\u542c\u529b\u771f\u9898\u4fa7\u680f");
+  }
+  function render() {
+    if (state.screen === "mock-setup") app.innerHTML = mockSetupTemplate();
+    else if (state.screen === "mock") app.innerHTML = mockTemplate();
+    else if (state.screen === "wrong") app.innerHTML = wrongTemplate();
+    else if (state.screen === "practice") app.innerHTML = practiceTemplate();
+    else app.innerHTML = homeTemplate();
+    decoratePracticeAudio();
+    decorateMockSetup();
+    decoratePracticeNavigation();
+    decoratePracticeSidebar();
+    decorateTranscriptAudio();
+  }
+  app.addEventListener("click", (event) => {
+    const action = event.target.closest("[data-action]")?.dataset.action;
+    if (action === "start-mock") startMock();
+  });
+  function transcriptTemplate(current, id, mock = false) {
+    const action = mock ? "focus-mock-transcript" : "focus-transcript";
+    const audioAttr = mock ? `data-mock-audio-id="${current.mockId}"` : "";
+    const containerAudioAttr = mock ? ` data-transcript-audio-id="${esc(current.mockId)}"` : "";
+    return `<div class="transcript ${mock ? "mock-transcript" : ""}" id="${id}"${containerAudioAttr}><button class="transcript-heading" data-action="${action}" ${audioAttr}><span>听力原文 · TRANSCRIPT</span><small>点击句子跳到这里并继续播放</small></button>${transcriptLinesTemplate(current, mock)}</div>`;
+  }
+  app.addEventListener("click", (event) => {
+    if (!event.target.closest('[data-action="toggle-transcript"]')) return;
+    state.showTranscript = !state.showTranscript;
+    render();
+  });
+  render();
+})();
