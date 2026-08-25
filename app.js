@@ -158,34 +158,53 @@
     Object.entries(remoteData || {}).forEach(([paperId, remoteRecord]) => {
       if (!remoteRecord || typeof remoteRecord !== "object" || Array.isArray(remoteRecord)) return;
       const localRecord = merged[paperId] || {};
-      const localClearedAt = Number(localRecord.clearedAt) || 0;
-      const remoteClearedAt = Number(remoteRecord.clearedAt) || 0;
-      const clearedAt = Math.max(localClearedAt, remoteClearedAt);
+      const paperClearedAt = Math.max(Number(localRecord.clearedAt) || 0, Number(remoteRecord.clearedAt) || 0);
+      const clearedTasks = {};
+      [localRecord, remoteRecord].forEach((record) => {
+        Object.entries(record.clearedTasks || {}).forEach(([taskId, timestamp]) => {
+          const at = Number(timestamp) || 0;
+          if (at > (clearedTasks[taskId] || 0)) clearedTasks[taskId] = at;
+        });
+      });
+      const taskClearedAt = (taskId) => Math.max(paperClearedAt, Number(clearedTasks[taskId]) || 0);
       const completed = {};
       const addCompleted = (taskId, result) => {
-        if (!result || Number(result.at || 0) <= clearedAt) return;
+        if (!result || Number(result.at || 0) <= taskClearedAt(taskId)) return;
         const current = completed[taskId];
         if (!current || Number(result.at || 0) > Number(current.at || 0)) completed[taskId] = result;
       };
       Object.entries(localRecord.completed || {}).forEach(([taskId, result]) => addCompleted(taskId, result));
       Object.entries(remoteRecord.completed || {}).forEach(([taskId, result]) => addCompleted(taskId, result));
-      const deletedSources = [];
-      if (localClearedAt >= clearedAt) deletedSources.push(localRecord.deletedWrong || []);
-      if (remoteClearedAt >= clearedAt) deletedSources.push(remoteRecord.deletedWrong || []);
-      const deletedWrong = [...new Set(deletedSources.flat())];
-      const bestValues = [];
-      if (localClearedAt >= clearedAt) bestValues.push(localRecord.best);
-      if (remoteClearedAt >= clearedAt) bestValues.push(remoteRecord.best);
-      Object.values(completed).forEach((result) => bestValues.push(result?.score));
+
+      const isFreshDeletedWrong = (record, key) => {
+        const taskId = String(key).split("::")[0];
+        const tombstone = taskClearedAt(taskId);
+        const recordClearedAt = Math.max(
+          Number(record.clearedAt) || 0,
+          Number(record.clearedTasks?.[taskId]) || 0
+        );
+        return !tombstone || recordClearedAt >= tombstone;
+      };
+      const deletedWrong = [...new Set([
+        ...(localRecord.deletedWrong || []).filter((key) => isFreshDeletedWrong(localRecord, key)),
+        ...(remoteRecord.deletedWrong || []).filter((key) => isFreshDeletedWrong(remoteRecord, key))
+      ])];
+
+      const scores = Object.values(completed).map((result) => Number(result?.score) || 0);
+      const best = paperClearedAt || Object.keys(clearedTasks).length
+        ? Math.max(...scores, 0)
+        : Math.max(Number(localRecord.best) || 0, Number(remoteRecord.best) || 0, ...scores);
       const mergedRecord = {
         ...localRecord,
         ...remoteRecord,
         completed,
         deletedWrong,
-        best: Math.max(...bestValues.map((value) => Number(value) || 0), 0)
+        best
       };
-      if (clearedAt) mergedRecord.clearedAt = clearedAt;
+      if (paperClearedAt) mergedRecord.clearedAt = paperClearedAt;
       else delete mergedRecord.clearedAt;
+      if (Object.keys(clearedTasks).length) mergedRecord.clearedTasks = clearedTasks;
+      else delete mergedRecord.clearedTasks;
       merged[paperId] = mergedRecord;
     });
     return merged;
@@ -309,6 +328,13 @@
           imported[paperId] = { completed, deletedWrong, best };
           const clearedAt = Number(record.clearedAt) || 0;
           if (clearedAt > 0) imported[paperId].clearedAt = clearedAt;
+          const clearedTasks = record.clearedTasks && typeof record.clearedTasks === "object" && !Array.isArray(record.clearedTasks) ? record.clearedTasks : {};
+          const importedClearedTasks = {};
+          Object.entries(clearedTasks).forEach(([taskId, timestamp]) => {
+            const at = Number(timestamp) || 0;
+            if (at > 0) importedClearedTasks[taskId] = at;
+          });
+          if (Object.keys(importedClearedTasks).length) imported[paperId].clearedTasks = importedClearedTasks;
         });
         if (Object.keys(payload.data).length && !Object.keys(imported).length) {
           throw new Error("no-known-papers");
@@ -330,26 +356,29 @@
     reader.readAsText(file);
   }
 
-  function clearPaperProgress(paperId) {
+  function clearTaskProgress(paperId, taskId) {
     const item = data.papers.find((entry) => entry.id === paperId);
-    if (!item) return;
+    if (!item || !taskId) return;
     const record = recordFor(paperId);
-    const hasProgress = Object.keys(record.completed || {}).length > 0 ||
-      Number(record.best) > 0 ||
-      (record.deletedWrong || []).length > 0;
+    const pendingAnswers = state.paperId === paperId ? state.answers[taskId] : null;
+    const hasProgress = Boolean(record.completed?.[taskId]) ||
+      Object.keys(pendingAnswers || {}).length > 0 ||
+      (record.deletedWrong || []).some((key) => key.startsWith(taskId + "::"));
     if (!hasProgress) {
-      window.alert("本套试卷暂时没有需要清除的选择。");
+      window.alert("本段对话暂时没有需要清除的选择。");
       return;
     }
-    if (!window.confirm("确定清除“" + item.title + "”的全部作答、成绩和错题记录吗？")) return;
-    saved[paperId] = {
-      completed: {},
-      best: 0,
-      deletedWrong: [],
-      clearedAt: Date.now()
-    };
-    if (state.paperId === paperId) {
-      state.answers = {};
+    const taskTitle = item.tasks.find((entry) => entry.id === taskId)?.title || "当前听力对话";
+    if (!window.confirm("确定清除“" + taskTitle + "”的全部作答、成绩和错题记录吗？")) return;
+    if (!saved[paperId]) saved[paperId] = { completed: {}, best: 0 };
+    const target = saved[paperId];
+    target.completed = { ...(target.completed || {}) };
+    delete target.completed[taskId];
+    target.deletedWrong = (target.deletedWrong || []).filter((key) => !key.startsWith(taskId + "::"));
+    target.clearedTasks = { ...(target.clearedTasks || {}), [taskId]: Date.now() };
+    target.best = Math.max(...Object.values(target.completed).map((result) => Number(result?.score) || 0), 0);
+    if (state.paperId === paperId && task().id === taskId) {
+      delete state.answers[taskId];
       state.submitted = false;
       state.showTranscript = false;
     }
@@ -409,7 +438,7 @@
     const done = completedCount(item);
     const progress = Math.round(done / item.tasks.length * 100);
     const best = recordFor(item.id).best || 0;
-    return `<article class="paper-card"><div><div class="paper-card-top"><div><div class="paper-kicker">CET-6 LISTENING</div><h3>${esc(item.title)}</h3><p class="paper-meta">${item.tasks.length} 组听力 · ${item.questionCount} 道题</p></div>${done === item.tasks.length ? '<span class="paper-badge">已完成</span>' : best ? `<span class="paper-badge">最高 ${best} 题</span>` : '<span class="paper-badge">未开始</span>'}</div></div><div><div class="paper-footer"><div class="progress-track"><i style="width:${progress}%"></i></div><span class="progress-number">${done}/${item.tasks.length} 组</span><div class="paper-actions"><button class="button primary" data-paper="${esc(item.id)}">${done ? "继续练习" : "开始练习"}</button><button class="button paper-clear" type="button" data-action="clear-paper" data-clear-paper="${esc(item.id)}" title="清除本套试卷的作答、成绩和错题记录">清除本套选择</button></div></div></div></article>`;
+    return `<article class="paper-card"><div><div class="paper-card-top"><div><div class="paper-kicker">CET-6 LISTENING</div><h3>${esc(item.title)}</h3><p class="paper-meta">${item.tasks.length} 组听力 · ${item.questionCount} 道题</p></div>${done === item.tasks.length ? '<span class="paper-badge">已完成</span>' : best ? `<span class="paper-badge">最高 ${best} 题</span>` : '<span class="paper-badge">未开始</span>'}</div></div><div><div class="paper-footer"><div class="progress-track"><i style="width:${progress}%"></i></div><span class="progress-number">${done}/${item.tasks.length} 组</span><button class="button primary" data-paper="${esc(item.id)}">${done ? "继续练习" : "开始练习"}</button></div></div></article>`;
   }
   function sidePapers() {
     return `<aside class="practice-side"><button class="side-back" data-action="home">← 返回试卷列表</button><div class="side-title">历年听力真题</div>${data.papers.map((item) => `<button class="side-paper ${item.id === state.paperId ? "active" : ""}" data-side-paper="${esc(item.id)}"><span>${esc(item.title)}</span><small>${completedCount(item)}/${item.tasks.length}</small></button>`).join("")}</aside>`;
@@ -420,7 +449,7 @@
     const answers = currentAnswers();
     const result = state.submitted ? recordFor(item.id).completed?.[current.id] : null;
     const selectedCount = Object.keys(answers).length;
-    return `${header("practice", `${item.title} · 练习中`)}<main class="practice-layout">${sidePapers()}<section class="practice-main"><div class="practice-heading"><div><div class="eyebrow" style="color:var(--teal)">LISTENING PRACTICE / ${esc(item.title)}</div><h1>${esc(current.title)}</h1><p>先完整听一遍，再选择你认为正确的答案。</p></div><div class="task-pager"><button class="button light" data-action="previous" ${state.taskIndex === 0 ? "disabled" : ""}>上一组</button><strong>${state.taskIndex + 1}</strong><span>/ ${item.tasks.length}</span><button class="button light" data-action="next" ${state.taskIndex === item.tasks.length - 1 ? "disabled" : ""}>下一组</button></div></div><div class="audio-card"><div class="audio-card-top"><div><div class="audio-label">NOW PLAYING · ${esc(current.section)}</div><h2>Questions ${current.questions[0]?.number || ""} to ${current.questions.at(-1)?.number || ""}</h2><p>${esc(current.context)}</p></div><span class="audio-icon">◖◗</span></div><audio id="audio-player" controls preload="metadata" src="${esc(current.audio)}"></audio><button type="button" class="button transcript-quick-toggle" data-action="toggle-transcript" aria-controls="transcript-current">显示 / 隐藏听力原文</button></div><section class="question-panel"><div class="question-panel-head"><div><h2>选择题</h2><span>已选择 ${selectedCount} / ${current.questions.length}</span></div>${result ? `<span class="score-pill">本组得分 ${result.score}/${result.total}</span>` : "<span>提交后显示答案</span>"}</div>${current.questions.map((question) => questionTemplate(question, answers)).join("")}<div class="question-actions"><span class="hint">${state.submitted ? "点击下方“听力原文”可回到当前听力段落。" : "每组听力可以反复播放，提交后仍可继续下一组。"}</span><div class="action-group"><button class="button ghost" data-action="reset-task">清空选择</button><button class="button primary" data-action="submit-task">${state.submitted ? "重新提交本组" : "提交本组答案"}</button></div></div>${(state.submitted || state.showTranscript) ? transcriptTemplate(current, "transcript-current") : ""}</section></section></main>`;
+    return `${header("practice", `${item.title} · 练习中`)}<main class="practice-layout">${sidePapers()}<section class="practice-main"><div class="practice-heading"><div><div class="eyebrow" style="color:var(--teal)">LISTENING PRACTICE / ${esc(item.title)}</div><h1>${esc(current.title)}</h1><p>先完整听一遍，再选择你认为正确的答案。</p></div><div class="task-pager"><button class="button light" data-action="previous" ${state.taskIndex === 0 ? "disabled" : ""}>上一组</button><strong>${state.taskIndex + 1}</strong><span>/ ${item.tasks.length}</span><button class="button light" data-action="next" ${state.taskIndex === item.tasks.length - 1 ? "disabled" : ""}>下一组</button></div></div><div class="audio-card"><div class="audio-card-top"><div><div class="audio-label">NOW PLAYING · ${esc(current.section)}</div><h2>Questions ${current.questions[0]?.number || ""} to ${current.questions.at(-1)?.number || ""}</h2><p>${esc(current.context)}</p></div><div class="audio-card-tools"><span class="audio-icon">◖◗</span><button class="button audio-clear" type="button" data-action="clear-task" data-clear-task="${esc(current.id)}" title="清除本段对话的作答、成绩和错题记录">清除本段选择</button></div></div><audio id="audio-player" controls preload="metadata" src="${esc(current.audio)}"></audio><button type="button" class="button transcript-quick-toggle" data-action="toggle-transcript" aria-controls="transcript-current">显示 / 隐藏听力原文</button></div><section class="question-panel"><div class="question-panel-head"><div><h2>选择题</h2><span>已选择 ${selectedCount} / ${current.questions.length}</span></div>${result ? `<span class="score-pill">本组得分 ${result.score}/${result.total}</span>` : "<span>提交后显示答案</span>"}</div>${current.questions.map((question) => questionTemplate(question, answers)).join("")}<div class="question-actions"><span class="hint">${state.submitted ? "点击下方“听力原文”可回到当前听力段落。" : "每组听力可以反复播放，提交后仍可继续下一组。"}</span><div class="action-group"><button class="button ghost" data-action="reset-task">清空选择</button><button class="button primary" data-action="submit-task">${state.submitted ? "重新提交本组" : "提交本组答案"}</button></div></div>${(state.submitted || state.showTranscript) ? transcriptTemplate(current, "transcript-current") : ""}</section></section></main>`;
   }
   function questionTemplate(question, answers) {
     const selected = answers[question.number];
@@ -665,8 +694,8 @@
     if (action === "open-mock") createMock();
     if (action === "mock-new") createMock();
     if (action === "open-wrong") { state.screen = "wrong"; render(); }
-    if (action === "clear-paper") {
-      clearPaperProgress(actionTarget.dataset.clearPaper);
+    if (action === "clear-task") {
+      clearTaskProgress(state.paperId, actionTarget.dataset.clearTask);
       return;
     }
     if (action === "cloud-auth") {
