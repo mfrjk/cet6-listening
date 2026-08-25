@@ -243,6 +243,19 @@
     return JSON.parse(JSON.stringify(value || {}));
   }
 
+  function mergeMockHighlights(...sources) {
+    const merged = {};
+    sources.forEach((source) => {
+      Object.entries(source || {}).forEach(([questionId, letters]) => {
+        merged[questionId] = merged[questionId] || {};
+        Object.entries(letters || {}).forEach(([letter, values]) => {
+          merged[questionId][letter] = [...new Set([...(merged[questionId][letter] || []), ...(Array.isArray(values) ? values : [])])];
+        });
+      });
+    });
+    return merged;
+  }
+
   function mergeMockWrongSets(localSets, remoteSets) {
     const byId = new Map();
     [...(Array.isArray(localSets) ? localSets : []), ...(Array.isArray(remoteSets) ? remoteSets : [])].forEach((set) => {
@@ -257,7 +270,8 @@
       byId.set(set.id, {
         ...latest,
         deletedIds: [...new Set([...(existing.deletedIds || []), ...(incoming.deletedIds || [])])],
-        items: Array.isArray(latest.items) ? latest.items : []
+        items: Array.isArray(latest.items) ? latest.items : [],
+        highlights: mergeMockHighlights(existing.highlights, incoming.highlights)
       });
     });
     return [...byId.values()].sort((a, b) => Number(b.submittedAt) - Number(a.submittedAt));
@@ -871,7 +885,7 @@
 
   function mockHistoryGroupTemplate(group, set) {
     const audio = group.audio ? '<div class="audio-card mock-history-audio"><div class="audio-card-top"><div><div class="audio-label">MOCK AUDIO \u00b7 \u542c\u529b\u97f3\u9891</div><h2>\u7b2c' + esc(group.groupNumber) + '\u7ec4\u97f3\u9891</h2><p>' + esc(group.context || "") + '</p></div><span class="audio-icon">▶</span></div><audio controls preload="metadata" src="' + esc(group.audio) + '"></audio></div>' : "";
-    return '<section class="mock-history-group"><div class="mock-group-head"><div><p>\u7b2c' + esc(group.groupNumber) + '\u7ec4 · ' + esc(mockSectionName(group.section)) + '</p><h2>' + esc(group.sourcePaper || "\u771f\u9898") + ' / ' + esc(group.title) + '</h2></div><span class="score-pill">\u6bcf\u9898 ' + mockWeight(group.section) + ' \u5206</span></div>' + audio + '<section class="question-panel"><div class="question-panel-head"><div><h2>' + esc(mockSectionName(group.section)) + '</h2><span>' + group.questions.length + ' \u9053\u9898</span></div><span>\u5df2\u5b8c\u6210</span></div>' + group.questions.map((question) => mockHistoryQuestionTemplate(question, group, set)).join('') + '</section></section>';
+    return '<section class="mock-history-group" data-mock-history-set-id="' + esc(set.id) + '"><div class="mock-group-head"><div><p>\u7b2c' + esc(group.groupNumber) + '\u7ec4 · ' + esc(mockSectionName(group.section)) + '</p><h2>' + esc(group.sourcePaper || "\u771f\u9898") + ' / ' + esc(group.title) + '</h2></div><span class="score-pill">\u6bcf\u9898 ' + mockWeight(group.section) + ' \u5206</span></div>' + audio + '<section class="question-panel"><div class="question-panel-head"><div><h2>' + esc(mockSectionName(group.section)) + '</h2><span>' + group.questions.length + ' \u9053\u9898</span></div><span>\u5df2\u5b8c\u6210</span></div>' + group.questions.map((question) => mockHistoryQuestionTemplate(question, group, set)).join('') + '</section></section>';
   }
   function mockHistoryDetailTemplate(group) {
     const set = group.history;
@@ -1025,7 +1039,19 @@
     const questionNumber = option.dataset.highlightQuestion;
     const letter = option.dataset.highlightOption;
     if (!questionNumber || !letter) return null;
-    const mockQuestion = option.closest('[data-mock-question]');
+    const historyNode = option.closest("[data-mock-history-set-id]");
+    const historyQuestion = option.closest("[data-mock-question]");
+    if (historyNode && historyQuestion) {
+      const sets = Array.isArray(saved[mockWrongStorageKey]) ? saved[mockWrongStorageKey] : [];
+      const set = sets.find((item) => item.id === historyNode.dataset.mockHistorySetId);
+      if (!set) return null;
+      const questionId = historyQuestion.dataset.mockQuestion;
+      set.highlights = set.highlights || {};
+      set.highlights[questionId] = set.highlights[questionId] || {};
+      set.highlights[questionId][letter] = set.highlights[questionId][letter] || [];
+      return { values: set.highlights[questionId][letter], history: true, set };
+    }
+    const mockQuestion = option.closest("[data-mock-question]");
     if (mockQuestion) {
       if (!state.mock) return null;
       state.mock.highlights = state.mock.highlights || {};
@@ -1052,8 +1078,18 @@
     saved[mockWrongStorageKey] = sets;
     persist();
   }
+  function saveHighlightStore(store) {
+    if (store?.history) {
+      store.set.highlights = store.set.highlights || {};
+      saved[mockWrongStorageKey] = Array.isArray(saved[mockWrongStorageKey]) ? saved[mockWrongStorageKey] : [];
+      persist();
+      return;
+    }
+    if (store?.mock) saveMockHighlights();
+    else persist();
+  }
   function markOptionSelection(selection) {
-    if (state.screen !== 'practice' && state.screen !== 'mock') return false;
+    if (state.screen !== 'practice' && state.screen !== 'mock' && state.screen !== 'wrong') return false;
     if (!selection || selection.rangeCount === 0 || selection.isCollapsed || !selection.toString().trim()) return false;
     const range = selection.getRangeAt(0);
     const optionFor = (node) => {
@@ -1079,8 +1115,7 @@
       if (parent) {
         while (startMark.firstChild) parent.insertBefore(startMark.firstChild, startMark);
         startMark.remove();
-        if (highlightStore.mock) saveMockHighlights();
-        else persist();
+        saveHighlightStore(highlightStore);
         if (typeof selection.removeAllRanges === 'function') selection.removeAllRanges();
         return true;
       }
@@ -1095,8 +1130,7 @@
       mark.appendChild(wordRange.extractContents());
       wordRange.insertNode(mark);
       if (!highlightStore.values.includes(markedText)) highlightStore.values.push(markedText);
-      if (highlightStore.mock) saveMockHighlights();
-      else persist();
+      saveHighlightStore(highlightStore);
       if (typeof selection.removeAllRanges === 'function') selection.removeAllRanges();
       return true;
     } catch (error) {
