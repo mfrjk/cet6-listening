@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#131518">
+<title>高压极化后 FEP 的电荷保持与衰减机制 · 提词器</title>
+<style>
+  :root {
+    color-scheme: dark;
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+    background: #131518;
+    color: #f1efeb;
+    --muted: #a5a6ac;
+    --accent: #f4d29b;
+    --bar: #212328;
+    --line: #34363c;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; overscroll-behavior: none; }
+  .app {
+    height: 100vh;
+    height: 100dvh;
+    display: grid;
+    grid-template-rows: minmax(0, 1fr) auto;
+    gap: 16px;
+    padding: max(26px, env(safe-area-inset-top)) max(26px, env(safe-area-inset-right))
+             max(16px, env(safe-area-inset-bottom)) max(26px, env(safe-area-inset-left));
+  }
+  .ready .app { touch-action: manipulation; }
+  .stage { width: min(100%, 1080px); min-height: 0; margin: 0 auto; }
+  .slide { height: 100%; display: none; grid-template-rows: auto minmax(0, 1fr); }
+  .slide:first-child, .slide:target { display: grid; }
+  :root:not(.ready) .stage:has(.slide:target) .slide:first-child:not(:target) { display: none; }
+  .ready .stage .slide:not(.active) { display: none; }
+  .ready .stage .slide.active { display: grid; }
+  .header { padding: 0 0 15px; border-bottom: 1px solid var(--line); }
+  .label { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; }
+  .label .index { color: var(--accent); font-variant-numeric: tabular-nums; }
+  h1 { margin: 8px 0 0; font-size: clamp(19px, 3vw, 33px); line-height: 1.25; font-weight: 650; }
+  .reading { overflow: hidden; min-height: 0; padding: 18px 0 2px; }
+  .text { font-size: clamp(13px, 3.7vmin, 32px); line-height: 1.48; word-break: normal; overflow-wrap: anywhere; line-break: strict; }
+  .text p { margin: 0; }
+  .text p + p { margin-top: .57em; }
+  .cue { color: #aab4c6; }
+  .text strong { color: var(--accent); font-weight: 650; white-space: nowrap; }
+  .dock {
+    display: flex;
+    align-items: stretch;
+    gap: 8px;
+    width: min(100%, 920px);
+    margin: 0 auto;
+    padding: 5px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: var(--bar);
+    user-select: none;
+  }
+  .dock a, .jump { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+  .dock a { color: #c4c5c9; min-height: 44px; display: grid; place-items: center; border-radius: 10px; text-decoration: none; }
+  .dock a:focus-visible, .jump select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .step { flex: 0 0 46px; background: #2d3036; }
+  .step[aria-disabled="true"] { opacity: .35; }
+  .step svg { width: 17px; height: 17px; }
+  .numbers { flex: 1; min-width: 0; display: flex; gap: 3px; align-items: stretch; }
+  .numbers a { flex: 1; min-width: 0; font-size: clamp(13px, 2.35vw, 17px); font-variant-numeric: tabular-nums; font-weight: 650; }
+  .numbers a[hidden] { display: none; }
+  .numbers a[aria-current="page"] { background: var(--accent); color: #211a10; }
+  .jump { flex: 0 0 60px; position: relative; min-height: 44px; display: grid; place-items: center; color: #c4c5c9; background: #2d3036; border-radius: 10px; font-size: 13px; font-weight: 600; }
+  .jump select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; font-size: 16px; }
+  .jump:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .jump option { color: #fff; background: #212328; }
+  .dock a:hover { background: #383b42; }
+  .numbers a[aria-current="page"]:hover { background: var(--accent); }
+  .fallback { display: none; }
+  @media (max-width: 600px), (max-height: 580px) {
+    .app { gap: 10px; padding: max(16px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+    .header { padding-bottom: 9px; }
+    .reading { padding-top: 11px; }
+    .step { flex-basis: 42px; }
+    .jump { flex-basis: 47px; }
+    .dock { gap: 4px; }
+  }
+  @media (max-height: 420px) { .app { padding-top: max(8px, env(safe-area-inset-top)); gap: 6px; } .header { padding-bottom: 6px; } .reading { padding-top: 7px; } h1 { margin-top: 3px; font-size: 18px; } }
+
+  .reading { overflow: auto; scrollbar-gutter: stable; overscroll-behavior: contain; scrollbar-color: var(--line) transparent; }
+  .text strong { white-space: normal; }
+  @media (max-width: 385px) { .step { flex-basis: 34px; } .jump { flex-basis: 42px; } }
+</style>
+<noscript><style>
+  .dock { display: none; }
+  .fallback { display: grid; grid-template-columns: repeat(13, 1fr); gap: 3px; margin: 0 auto; width: min(100%, 760px); }
+  .fallback a { text-align: center; padding: 4px 0; border-radius: 5px; background: var(--bar); color: var(--accent); text-decoration: none; }
+  @media (max-height: 560px) { .text { font-size: 14px; } }
+</style></noscript>
+</head>
+<body>
+<div class="app">
+  <main class="stage" aria-label="当前页讲稿">
+    <section class="slide" id="p01" aria-labelledby="title-01">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 01 / 23</span></div><h1 id="title-01">高压极化后 FEP 的电荷保持与衰减机制</h1></header>
+  <div class="reading"><div class="text"><p>今天讨论<strong>高压极化后的 FEP</strong>。我们从施加电压讲起，先弄清电荷怎样进入薄膜、撤场时在哪里，再沿时间轴看哪些电荷得以留下、哪些会逐渐丢失。最后把不同实验归到同一组影响因素下，看看研究结论能适用到什么条件。</p></div></div>
+</section>
+<section class="slide" id="p02" aria-labelledby="title-02">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 02 / 23</span></div><h1 id="title-02">目录</h1></header>
+  <div class="reading"><div class="text"><p>这次汇报分为四个部分。先介绍高压极化给 FEP 带来的<strong>初始电荷分布</strong>，再讨论撤场后的<strong>保持机制</strong>。第三部分用温度、湿度和气隙放电的文献数据解释衰减，最后结合不同实验的<strong>测量条件</strong>归纳研究结论。</p></div></div>
+</section>
+<section class="slide" id="p03" aria-labelledby="title-03">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 03 / 23</span></div><h1 id="title-03">针电极电晕与 FEP 表面沉积</h1></header>
+  <div class="reading"><div class="text"><p><span class="cue">（先指左图针尖，再看右图的电离枪和膜面）</span>左图是针电极电晕装置。针尖附近电场强，<strong>气体发生电离</strong>。右图是另一篇论文的空气电离枪。产生的<strong>负离子</strong>在电场作用下到达 FEP 膜面并积累。接地背电极参与决定电场分布。</p>
+<p>撤场后，沉积在表面或进入<strong>近表层</strong>的部分电荷仍可能留下。下一页看持续偏压下，沿厚度方向测到的空间电荷。</p></div></div>
+</section>
+<section class="slide" id="p04" aria-labelledby="title-04">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 04 / 23</span></div><h1 id="title-04">持续直流偏压下的 FEP 空间电荷</h1></header>
+  <div class="reading"><div class="text"><p><span class="cue">（指两张空间电荷图）</span>上下电极加压时，<strong>脉冲电声法</strong>可以跟踪厚度方向的空间电荷。横轴是持续加压的时间，纵轴是<strong>归一化后的厚度位置</strong>，颜色对应电荷密度。左侧是 25 °C，右侧是 50 °C 且存在温度梯度。</p>
+<p>这个实验回答电场还在时，空间电荷在哪里积累。要看撤掉电压后的保持，需要另有<strong>撤场后的测量序列</strong>。</p></div></div>
+</section>
+<section class="slide" id="p05" aria-labelledby="title-05">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 05 / 23</span></div><h1 id="title-05">电晕极化后 FEP 的初始器件输出</h1></header>
+  <div class="reading"><div class="text"><p><span class="cue">（指红蓝线）</span>这幅图比较相同器件条件下的初始输出。蓝线是原膜，红线是电晕极化后的膜。在与 PA 配对的条件下，RRF-FEP3 极化后的初始输出<strong>约为极化前的 17.5 倍</strong>。纵轴是器件测得的<strong>输出电荷密度</strong>。接下来区分这一读数、薄膜表面电位和实际电荷分布。</p></div></div>
+</section>
+<section class="slide" id="p06" aria-labelledby="title-06">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 06 / 23</span></div><h1 id="title-06">表面电位测量与电荷分布反演</h1></header>
+  <div class="reading"><div class="text"><p><span class="cue">（左图指三个观测量，右图指探头和扫描网格）</span>单位面积上的电荷量是材料表面的量。探头测的是<strong>表面电位</strong>，其读数还受<strong>探头距离</strong>、样品接地和电荷分布影响。器件输出又会随电极运动和外电路变化。</p>
+<p>右图的研究先逐点扫描电位，再结合测量几何和正则化<strong>估算表面电荷分布</strong>。</p></div></div>
+</section>
+<section class="slide" id="p07" aria-labelledby="title-07">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 07 / 23</span></div><h1 id="title-07">浅陷阱较易释放，深陷阱有利于长期保持</h1></header>
+  <div class="reading"><div class="text"><p><span class="cue">（指红色虚线）</span>局域陷阱可以理解为电子容易暂时停留的能量状态。<strong>较浅的陷阱</strong>一般能以较低的能量代价释放电子，<strong>较深的陷阱</strong>在同温度下通常释放较慢。如果样品同时占据不同深度的陷阱，有些电荷可能较快衰减，另一些则保留更久。</p>
+<p>图中 FEP 的 LUMO 和陷阱能级来自作者提出的模型。单凭示意图不能确定深浅陷阱各占多少，后续需要结合<strong>温度响应</strong>。</p></div></div>
+</section>
+<section class="slide" id="p08" aria-labelledby="title-08">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 08 / 23</span></div><h1 id="title-08">热刺激放电谱与陷阱释放</h1></header>
+  <div class="reading"><div class="text"><p><span class="cue">（指插图的开路测量结构，再指宽峰）</span>这一页把上一页的陷阱能级图和实测放电谱对起来。样品是负电晕充电后的波纹 FEP 膜。开路升温时，<strong>热激发</strong>提高载流子脱离局域状态的概率。释放后在内电场里的漂移和电荷分布变化会引起外电路电流。</p>
+<p>图中在每分钟 3 摄氏度的升温条件下，宽峰位于<strong>约 202 摄氏度</strong>。峰位与升温程序和输运条件有关，因此应把它理解为放电响应温区，单凭峰温<strong>无法唯一确定陷阱深度</strong>。</p></div></div>
+</section>
+<section class="slide" id="p09" aria-labelledby="title-09">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 09 / 23</span></div><h1 id="title-09">晶区与非晶区界面可能参与储荷</h1></header>
+  <div class="reading"><div class="text"><p><span class="cue">（看上、下两幅结构示意）</span>上图是商业 FEP，下图是反复流变锻造的 RRF-FEP。作者结合表面分析和衍射，分别讨论了表面含氟基团与起电的关系，以及薄膜内部的界面作用。</p>
+<p>晶区和非晶区的局部结构不同，载流子可能在界面附近聚集并产生<strong>界面极化</strong>。论文提出这是提高储荷能力的一条解释，现有图文<strong>并未分别量化</strong>晶区、非晶区和界面的储荷量。下一页借助一项复合膜研究看热历史怎样影响这种储荷行为。</p></div></div>
+</section>
+<section class="slide" id="p10" aria-labelledby="title-10">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 10 / 23</span></div><h1 id="title-10">淬冷极化后的储荷模型</h1></header>
+  <div class="reading"><div class="text"><p><span class="cue">（依次指高温加压、淬冷和能量井）</span>这项研究使用含 FEP 纳米颗粒的 <strong>Ecoflex 复合膜</strong>。作者提出，载流子在高温和电场下向膜内迁移，快速冷却后有一部分可以被<strong>更深的局域状态</strong>束缚。热刺激去极化电流提供了释放随温度变化的证据。</p>
+<p><strong>纯 FEP</strong> 没有同样的颗粒和基体界面，因此用它解释纯膜时需要回到纯膜实验。接下来先看<strong>纯 FEP</strong> 在长期跟踪中还保留了多少器件输出。</p></div></div>
+</section>
+<section class="slide" id="p11" aria-labelledby="title-11">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 11 / 23</span></div><h1 id="title-11">负离子注入后 FEP 的长期保持</h1></header>
+  <div class="reading"><div class="text"><p><span class="cue">（沿横轴从初始读数指到第 160 天）</span>Wang 等用空气电离装置向 FEP 引入负离子，再用器件的<strong>短路转移电荷密度</strong>跟踪输出。初始约每平方米 240 微库仑，<strong>前 80 天</strong>降至约 200 微库仑，之后<strong>变化趋缓</strong>。</p>
+<p>这是特定样品与测量条件下的结果。要解释曲线的快慢阶段，接下来分别看热脱陷、重分布和表面泄漏等路径。</p></div></div>
+</section>
+<section class="slide" id="p12" aria-labelledby="title-12">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 12 / 23</span></div><h1 id="title-12">脱陷之后，电荷可能沿多条路径迁移或损失</h1></header>
+  <div class="reading"><div class="text"><p><span class="cue">（沿图中陷阱、膜内和接地电极指读）</span>脱陷是载流子离开原来的局域状态，之后它可能被<strong>再次俘获</strong>，也可能继续移动。</p>
+<p>向膜内迁移会<strong>改变空间分布</strong>，甚至在净电荷近似相同的情况下改变测得的电位。<strong>沿表面</strong>向边缘或接地点输运，会为电荷损失提供通道。正负载流子相遇时可以<strong>复合</strong>。</p>
+<p>还有一种发生在器件运动阶段的通道，即<strong>气隙放电</strong>。下一页先把机制和各自的证据对起来。</p></div></div>
+</section>
+<section class="slide" id="p13" aria-labelledby="title-13">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 13 / 23</span></div><h1 id="title-13">衰减路径与文献证据</h1></header>
+  <div class="reading"><div class="text"><p><span class="cue">（按五行给出证据）</span>热脱陷的支持来自 FEP 的<strong>温度依赖</strong>和热激活拟合。体内迁移有持续偏压下的 PEA 图作为分布证据，<strong>撤场后的演化</strong>仍需单独测量。</p>
+<p>表面泄漏主要借助 PTFE 的湿度对照来理解，需在 FEP 上控制湿度及边缘电学条件再验证。复合在机制图中合理，但已有电位数据<strong>无法单独给出复合份额</strong>。</p>
+<p>气隙放电证据则对应 论文中的 FEP 器件和特定气隙间距。下面依次展开有明确图证的温度、湿度和气隙三组结果。</p></div></div>
+</section>
+<section class="slide" id="p14" aria-labelledby="title-14">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 14 / 23</span></div><h1 id="title-14">升温后的电荷衰减与局部电位变化</h1></header>
+  <div class="reading"><div class="text"><p><span class="cue">（先指左侧两张曲线，再指右侧高注入列）</span>左侧第一张图在 <strong>333 K</strong> 下跟踪不同注入电流密度的衰减。第二张在处理 60 分钟后比较不同温度，固定注入条件时，<strong>高温组保留量较低</strong>。</p>
+<p>右图是<strong>局部电位扫描</strong>，高注入列在 373 K 后对比明显减弱。两组结果都指向升温后带电状态的变化，下一页再看作者如何用热激活拟合描述这一变化。</p></div></div>
+</section>
+<section class="slide" id="p15" aria-labelledby="title-15">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 15 / 23</span></div><h1 id="title-15">Arrhenius 拟合给出表观活化能</h1></header>
+  <div class="reading"><div class="text"><p><span class="cue">（指图例和两条拟合线）</span>作者把温度依赖用 <strong>Arrhenius 关系</strong>来分析。对 10 和 120 μA/cm² 两种注入电流密度，图中给出的表观活化能分别是 <strong>0.354 和 0.402 eV</strong>。两个值对应论文的样品、测量和拟合条件。</p>
+<p>我这里用“表观”是因为拟合值来自宏观电荷变化。实际可能同时包含<strong>脱陷和后续输运</strong>，不能用一个拟合值指认所有微观陷阱。就这篇论文而言，更直接的结论是两种注入条件下都观测到明显的温度依赖。</p></div></div>
+</section>
+<section class="slide" id="p16" aria-labelledby="title-16">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 16 / 23</span></div><h1 id="title-16">湿度影响：PTFE 正负电荷响应不同</h1></header>
+  <div class="reading"><div class="text"><p><span class="cue">（指两张图中同一颜色的线）</span>这里比较 50%、70% 和 90% 的<strong>相对湿度</strong>，横轴到 168 小时，也就是 7 天。左侧是负电荷，右侧是正电荷。高湿条件下电荷下降更明显，右图的变化尤其容易看出来。</p>
+<p>一种解释是水分改变<strong>表面的传导条件</strong>，也可能让边缘和不同区域间的电荷更容易重新分布。图中同时显示湿度和极性相关的差异。它提供的是 <strong>PTFE 体系</strong>下的受控比较，不能由这些数值直接推算 FEP 的湿度响应。</p></div></div>
+</section>
+<section class="slide" id="p17" aria-labelledby="title-17">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 17 / 23</span></div><h1 id="title-17">PTFE 的长期保持随电荷极性变化</h1></header>
+  <div class="reading"><div class="text"><p><span class="cue">（先看左图，再指右图同一个时间点）</span>两幅图都是 PTFE。在论文的条件下，到<strong>第 140 天</strong>时，左侧负电荷<strong>约保留 90%</strong>，右侧正电荷<strong>约保留 95%</strong>。</p>
+<p>内嵌图还展示了三个时刻的空间分布。这个对照补充了前一页的七天湿度实验，说明讨论湿度或长期保持时，也应交代注入电荷的极性。这两个保持率对应这里的 PTFE 样品。</p></div></div>
+</section>
+<section class="slide" id="p18" aria-labelledby="title-18">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 18 / 23</span></div><h1 id="title-18">高湿环境下的 FEP 电位衰减</h1></header>
+  <div class="reading"><div class="text"><p><span class="cue">（指黑、红、蓝三条曲线）</span>前面用 PTFE 做湿度对照，这里回到 FEP。论文采用波纹 FEP，负电晕充电后先在 120 摄氏度预老化 30 分钟，再在室温下分别放置于干燥、实验室环境和 <strong>99% 相对湿度</strong>。</p>
+<p>干燥和约 60% 湿度下变化较小，最高湿的样品在约 10 天后降至<strong>初始电位的 75%</strong>。</p>
+<p>吸附水提高<strong>沿面导电性</strong>是一个可能的解释。这里直接测到的是电位衰减，沿面泄漏和电荷重新分布的份额仍需独立测量。</p></div></div>
+</section>
+<section class="slide" id="p19" aria-labelledby="title-19">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 19 / 23</span></div><h1 id="title-19">极化后测量中的气隙放电</h1></header>
+  <div class="reading"><div class="text"><p><span class="cue">（左指气隙，右指击穿曲线）</span>当带电 FEP 和对面的电极之间存在空气层时，气隙会承担一部分电压降。右图红线表示给定间距的<strong>空气击穿阈值</strong>。实际气隙电压超过阈值后可能放电，放电产生的载流子可能<strong>屏蔽或中和</strong>部分表面电荷。</p>
+<p>这一效应取决于<strong>气隙和器件结构</strong>，解读极化后读数时需交代这些条件。</p></div></div>
+</section>
+<section class="slide" id="p20" aria-labelledby="title-20">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 20 / 23</span></div><h1 id="title-20">同种复合膜的电位保持随极化方式而变</h1></header>
+  <div class="reading"><div class="text"><p><span class="cue">（指三条曲线）</span>同配方的 5-FEP 复合膜经电晕、热极化和淬冷极化后，初始电位就已不同。第 10 天的电位绝对值分别约保留各自初值的 <strong>71%、72% 和 89%</strong>。</p>
+<p>归一化结果提示，<strong>极化和热历史</strong>既改变起点，也能改变相对衰减。这里的 FEP 是颗粒填料，<strong>基体为 Ecoflex</strong>。比较纯 FEP 时，要按纯膜自己的结构、极化方式和对应工况判断。</p></div></div>
+</section>
+<section class="slide" id="p21" aria-labelledby="title-21">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 21 / 23</span></div><h1 id="title-21">背面介质与电极边界的影响</h1></header>
+  <div class="reading"><div class="text"><p><span class="cue">（先看上半图的接触状态，再看下方对照）</span>Lin 等提出<strong>异号电荷协同模型</strong>，讨论薄膜两面的异号电荷以及与外界接触后电位怎样变化。上图里几种不同的接触边界对应不同的电荷保留情况。下方 b–d 是单层 PTFE，e 比较五种单层驻极体，其中包括 FEP。</p>
+<p>对这个主题来说，值得关注的是同一片带电膜在空气中、贴着介质或贴着电极时，<strong>外部电场边界</strong>已经变了。比较两次电位测量时，翻面、背面接触和<strong>电极接地</strong>这些条件都会影响读数的解释。论文也讨论了含 FEP 在内的其他材料，具体结果按各自实验边界理解。</p></div></div>
+</section>
+<section class="slide" id="p22" aria-labelledby="title-22">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 22 / 23</span></div><h1 id="title-22">表面电位保持率与热刺激放电</h1></header>
+  <div class="reading"><div class="text"><p><span class="cue">（左指探头与样品台，右指加热器与静电计）</span>放置过程中可以测表面电位，归一化时要先确定<strong>起算点</strong>。以首次读数为基准会纳入早期衰减，等快衰减后起算则反映后段保持。</p>
+<p>热刺激放电是另一种观测，在控温升温时记录<strong>放电电流</strong>。电流峰可能包含载流子释放和极化松弛，要结合<strong>升温速率</strong>、样品结构及电极配置解释。</p></div></div>
+</section>
+<section class="slide" id="p23" aria-labelledby="title-23">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 23 / 23</span></div><h1 id="title-23">研究总结</h1></header>
+  <div class="reading"><div class="text"><p>第一，极化方式、电场和电极边界共同影响 FEP 的<strong>初始电荷量和分布</strong>。撤场后，电荷可以留在表面，也可能留在膜内。</p>
+<p>第二，<strong>局域陷阱</strong>有助于电荷保留，升温会促进脱陷和输运。长期跟踪中，特定器件的短路转移电荷密度先降后趋缓。</p>
+<p>第三，比较保持率时，应先说清测量量，并<strong>统一温湿度、电极边界和起算时刻</strong>。</p>
+<p>我的汇报到这里，谢谢大家，欢迎讨论。</p></div></div>
+</section>
+  </main>
+  <nav class="dock" aria-label="PPT 页码">
+    <a class="step prev" href="#p01" aria-label="上一页" title="上一页（←）"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+    <div class="numbers"><a href="#p01" aria-label="第 1 页，高压极化后 FEP 的电荷保持与衰减机制">01</a>
+<a href="#p02" aria-label="第 2 页，目录">02</a>
+<a href="#p03" aria-label="第 3 页，针电极电晕与 FEP 表面沉积">03</a>
+<a href="#p04" aria-label="第 4 页，持续直流偏压下的 FEP 空间电荷">04</a>
+<a href="#p05" aria-label="第 5 页，电晕极化后 FEP 的初始器件输出">05</a>
+<a href="#p06" aria-label="第 6 页，表面电位测量与电荷分布反演">06</a>
+<a href="#p07" aria-label="第 7 页，浅陷阱较易释放，深陷阱有利于长期保持">07</a>
+<a href="#p08" aria-label="第 8 页，热刺激放电谱与陷阱释放">08</a>
+<a href="#p09" aria-label="第 9 页，晶区与非晶区界面可能参与储荷">09</a>
+<a href="#p10" aria-label="第 10 页，淬冷极化后的储荷模型">10</a>
+<a href="#p11" aria-label="第 11 页，负离子注入后 FEP 的长期保持">11</a>
+<a href="#p12" aria-label="第 12 页，脱陷之后，电荷可能沿多条路径迁移或损失">12</a>
+<a href="#p13" aria-label="第 13 页，衰减路径与文献证据">13</a>
+<a href="#p14" aria-label="第 14 页，升温后的电荷衰减与局部电位变化">14</a>
+<a href="#p15" aria-label="第 15 页，Arrhenius 拟合给出表观活化能">15</a>
+<a href="#p16" aria-label="第 16 页，湿度影响：PTFE 正负电荷响应不同">16</a>
+<a href="#p17" aria-label="第 17 页，PTFE 的长期保持随电荷极性变化">17</a>
+<a href="#p18" aria-label="第 18 页，高湿环境下的 FEP 电位衰减">18</a>
+<a href="#p19" aria-label="第 19 页，极化后测量中的气隙放电">19</a>
+<a href="#p20" aria-label="第 20 页，同种复合膜的电位保持随极化方式而变">20</a>
+<a href="#p21" aria-label="第 21 页，背面介质与电极边界的影响">21</a>
+<a href="#p22" aria-label="第 22 页，表面电位保持率与热刺激放电">22</a>
+<a href="#p23" aria-label="第 23 页，研究总结">23</a></div>
+    <a class="step next" href="#p02" aria-label="下一页" title="下一页（→）"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
+    <label class="jump"><span aria-hidden="true">跳页</span><select aria-label="跳到指定的 PPT 页"><option value="p01">01 · 高压极化后 FEP 的电荷保持与衰减机制</option>
+<option value="p02">02 · 目录</option>
+<option value="p03">03 · 针电极电晕与 FEP 表面沉积</option>
+<option value="p04">04 · 持续直流偏压下的 FEP 空间电荷</option>
+<option value="p05">05 · 电晕极化后 FEP 的初始器件输出</option>
+<option value="p06">06 · 表面电位测量与电荷分布反演</option>
+<option value="p07">07 · 浅陷阱较易释放，深陷阱有利于长期保持</option>
+<option value="p08">08 · 热刺激放电谱与陷阱释放</option>
+<option value="p09">09 · 晶区与非晶区界面可能参与储荷</option>
+<option value="p10">10 · 淬冷极化后的储荷模型</option>
+<option value="p11">11 · 负离子注入后 FEP 的长期保持</option>
+<option value="p12">12 · 脱陷之后，电荷可能沿多条路径迁移或损失</option>
+<option value="p13">13 · 衰减路径与文献证据</option>
+<option value="p14">14 · 升温后的电荷衰减与局部电位变化</option>
+<option value="p15">15 · Arrhenius 拟合给出表观活化能</option>
+<option value="p16">16 · 湿度影响：PTFE 正负电荷响应不同</option>
+<option value="p17">17 · PTFE 的长期保持随电荷极性变化</option>
+<option value="p18">18 · 高湿环境下的 FEP 电位衰减</option>
+<option value="p19">19 · 极化后测量中的气隙放电</option>
+<option value="p20">20 · 同种复合膜的电位保持随极化方式而变</option>
+<option value="p21">21 · 背面介质与电极边界的影响</option>
+<option value="p22">22 · 表面电位保持率与热刺激放电</option>
+<option value="p23">23 · 研究总结</option></select></label>
+  </nav>
+  <noscript><nav class="fallback" aria-label="选择幻灯片"><a href="#p01" aria-label="第 1 页，高压极化后 FEP 的电荷保持与衰减机制">01</a>
+<a href="#p02" aria-label="第 2 页，目录">02</a>
+<a href="#p03" aria-label="第 3 页，针电极电晕与 FEP 表面沉积">03</a>
+<a href="#p04" aria-label="第 4 页，持续直流偏压下的 FEP 空间电荷">04</a>
+<a href="#p05" aria-label="第 5 页，电晕极化后 FEP 的初始器件输出">05</a>
+<a href="#p06" aria-label="第 6 页，表面电位测量与电荷分布反演">06</a>
+<a href="#p07" aria-label="第 7 页，浅陷阱较易释放，深陷阱有利于长期保持">07</a>
+<a href="#p08" aria-label="第 8 页，热刺激放电谱与陷阱释放">08</a>
+<a href="#p09" aria-label="第 9 页，晶区与非晶区界面可能参与储荷">09</a>
+<a href="#p10" aria-label="第 10 页，淬冷极化后的储荷模型">10</a>
+<a href="#p11" aria-label="第 11 页，负离子注入后 FEP 的长期保持">11</a>
+<a href="#p12" aria-label="第 12 页，脱陷之后，电荷可能沿多条路径迁移或损失">12</a>
+<a href="#p13" aria-label="第 13 页，衰减路径与文献证据">13</a>
+<a href="#p14" aria-label="第 14 页，升温后的电荷衰减与局部电位变化">14</a>
+<a href="#p15" aria-label="第 15 页，Arrhenius 拟合给出表观活化能">15</a>
+<a href="#p16" aria-label="第 16 页，湿度影响：PTFE 正负电荷响应不同">16</a>
+<a href="#p17" aria-label="第 17 页，PTFE 的长期保持随电荷极性变化">17</a>
+<a href="#p18" aria-label="第 18 页，高湿环境下的 FEP 电位衰减">18</a>
+<a href="#p19" aria-label="第 19 页，极化后测量中的气隙放电">19</a>
+<a href="#p20" aria-label="第 20 页，同种复合膜的电位保持随极化方式而变">20</a>
+<a href="#p21" aria-label="第 21 页，背面介质与电极边界的影响">21</a>
+<a href="#p22" aria-label="第 22 页，表面电位保持率与热刺激放电">22</a>
+<a href="#p23" aria-label="第 23 页，研究总结">23</a></nav></noscript>
+</div>
+<script>
+(() => {
+  'use strict';
+  const stage = document.querySelector('.stage');
+  const slides = Array.from(stage.querySelectorAll('.slide'));
+  const dock = document.querySelector('.dock');
+  const numbers = dock.querySelector('.numbers');
+  const links = Array.from(numbers.querySelectorAll('a'));
+  const previous = dock.querySelector('.prev');
+  const next = dock.querySelector('.next');
+  const jump = dock.querySelector('select');
+  const indexByID = new Map(slides.map((slide, i) => [slide.id, i]));
+  let current = 0;
+  let frame = 0;
+
+  function fit() {
+    const area = slides[current].querySelector('.reading');
+    const prose = area.firstElementChild;
+    const style = getComputedStyle(area);
+    const available = area.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom) - 10;
+    let low = 13;
+    let high = Math.max(low, Math.min(43, Math.round(area.clientWidth / 19 + 5)));
+    while (low < high) {
+      const attempt = Math.ceil((low + high) / 2);
+      prose.style.fontSize = attempt + 'px';
+      if (prose.getBoundingClientRect().height <= available) low = attempt;
+      else high = attempt - 1;
+    }
+    prose.style.fontSize = low + 'px';
+    while (low > 13 && area.scrollHeight > area.clientHeight) prose.style.fontSize = (--low) + 'px';
+  }
+  function scheduleFit() {
+    cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(fit);
+  }
+  function step(link, index) {
+    const valid = index >= 0 && index < slides.length;
+    link.setAttribute('aria-disabled', String(!valid));
+    link.tabIndex = valid ? 0 : -1;
+    link.hash = slides[valid ? index : current].id;
+  }
+  function paint() {
+    const count = Math.max(1, Math.min(slides.length, Math.floor(numbers.clientWidth / 38)));
+    const start = Math.max(0, Math.min(slides.length - count, current - Math.floor(count / 2)));
+    links.forEach((link, i) => {
+      link.hidden = i < start || i >= start + count;
+      if (i === current) link.setAttribute('aria-current','page');
+      else link.removeAttribute('aria-current');
+    });
+    step(previous, current - 1);
+    step(next, current + 1);
+    jump.value = slides[current].id;
+  }
+  function show(index, updateHash) {
+    if (!Number.isInteger(index) || index < 0 || index >= slides.length) return;
+    current = index;
+    slides.forEach((slide, i) => slide.classList.toggle('active', i === current));
+    slides[current].querySelector('.reading').scrollTop = 0;
+    paint();
+    scheduleFit();
+    if (updateHash) {
+      const hash = '#' + slides[current].id;
+      try { history.replaceState(null, '', hash); }
+      catch { if (location.hash !== hash) location.hash = hash; }
+    }
+  }
+  function readHash() {
+    show(indexByID.get(location.hash.slice(1)) ?? 0, false);
+  }
+  function resize() { paint(); scheduleFit(); }
+
+  jump.addEventListener('change', () => show(indexByID.get(jump.value), true));
+  dock.addEventListener('click', e => {
+    const a = e.target.closest('a');
+    if (!a || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+    e.preventDefault();
+    if (a.getAttribute('aria-disabled') !== 'true') show(indexByID.get(a.hash.slice(1)), true);
+  });
+  stage.addEventListener('click', e => {
+    const selection = getSelection();
+    if (!e.detail || e.defaultPrevented || (selection && !selection.isCollapsed)) return;
+    show(current + (e.clientX < innerWidth / 2 ? -1 : 1), true);
+  });
+  window.addEventListener('keydown', e => {
+    if (e.altKey || e.ctrlKey || e.metaKey || e.isComposing || /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+    let index;
+    switch (e.key) {
+      case 'ArrowRight': case 'PageDown': index = current + 1; break;
+      case 'ArrowLeft': case 'PageUp': index = current - 1; break;
+      case 'Home': index = 0; break;
+      case 'End': index = slides.length - 1; break;
+      default: return;
+    }
+    e.preventDefault();
+    show(index, true);
+  });
+  window.addEventListener('hashchange', readHash);
+  window.addEventListener('resize', resize);
+  if (window.ResizeObserver) new ResizeObserver(resize).observe(stage);
+  document.documentElement.classList.add('ready');
+  readHash();
+  if (document.fonts) document.fonts.ready.then(scheduleFit);
+})();
+</script>
+</body>
+</html>

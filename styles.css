@@ -231,6 +231,8 @@ body{background:radial-gradient(circle at 8% 0%,rgba(216,248,244,.72),transparen
   .cloud-auth{min-height:38px;padding:8px 6px;font-size:10px}
 }
 
+.nav-link-tool{display:inline-flex;align-items:center;justify-content:center;text-decoration:none;white-space:nowrap}
+
 /* Mobile navigation keeps every desktop destination reachable */
 @media(max-width:580px){
   .topbar{height:auto;min-height:62px;flex-wrap:wrap;align-items:center;row-gap:6px;padding:10px 14px 8px}

@@ -651,6 +651,7 @@
       <button class="nav-link ${active === "practice" ? "active" : ""}" data-action="home">真题练习</button>
       <button class="nav-link ${active === "mock" ? "active" : ""}" data-action="open-mock">模拟练习</button>
       <button class="nav-link ${active === "wrong" ? "active" : ""}" data-action="open-wrong">错题回顾${wrongTotal() ? ` · ${wrongTotal()}` : ""}</button>
+      <a class="nav-link nav-link-tool" href="./fep-prompter/" target="_blank" rel="noopener">组会提词器</a>
     </nav>`;
   }
   function header(active = "practice", context = "") {
