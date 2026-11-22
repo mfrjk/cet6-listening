@@ -23,7 +23,7 @@
 
 ## 组会提词器
 
-[打开高压极化后 FEP 组会提词器（23 页）](https://mfrjk.github.io/cet6-listening/fep-prompter/) · [HTML 源文件](fep-prompter/index.html)。
+[打开单层 FEP 压电驻极体组会提词器（24 页）](https://mfrjk.github.io/cet6-listening/fep-prompter/) · [HTML 源文件](fep-prompter/index.html)。
 
 ## 使用
 

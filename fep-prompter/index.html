@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#131518">
-<title>高压极化后 FEP 的电荷保持与衰减机制 · 提词器</title>
+<title>单层FEP压电驻极体的电荷保持与衰减原理 · 提词器</title>
 <style>
   :root {
     color-scheme: dark;
@@ -99,196 +99,293 @@
 <div class="app">
   <main class="stage" aria-label="当前页讲稿">
     <section class="slide" id="p01" aria-labelledby="title-01">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 01 / 23</span></div><h1 id="title-01">高压极化后 FEP 的电荷保持与衰减机制</h1></header>
-  <div class="reading"><div class="text"><p>今天讨论<strong>高压极化后的 FEP</strong>。我们从施加电压讲起，先弄清电荷怎样进入薄膜、撤场时在哪里，再沿时间轴看哪些电荷得以留下、哪些会逐渐丢失。最后把不同实验归到同一组影响因素下，看看研究结论能适用到什么条件。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 01 / 24</span></div><h1 id="title-01">单层FEP压电驻极体的电荷保持与衰减原理</h1></header>
+  <div class="reading"><div class="text"><p>各位老师好，我今天汇报的题目是《单层FEP压电驻极体的电荷保持与衰减原理》。</p>
+<p>我们目前关注的是一种由上下两片带有相反极性电荷的FEP薄膜，以及中间PDMS弹性层组成的压电驻极体结构。</p>
+<p>这种器件不需要持续施加外部电压，而是依靠<strong>预先储存在FEP中的电荷</strong>，在受力变形时产生电信号。</p>
+<p>但这里存在一个关键问题：电荷并不是永久储存在FEP中的。</p>
+<p>随着静置时间增加，或者受到温度、湿度及机械工作条件的影响，电荷可能发生迁移和衰减，从而影响器件输出的长期稳定性。</p>
+<p>所以这次我主要结合相关文献，分析FEP内部<strong>电荷的注入、储存、流失机制</strong>，以及有哪些可行的方法改善电荷保持性能。</p></div></div>
 </section>
 <section class="slide" id="p02" aria-labelledby="title-02">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 02 / 23</span></div><h1 id="title-02">目录</h1></header>
-  <div class="reading"><div class="text"><p>这次汇报分为四个部分。先介绍高压极化给 FEP 带来的<strong>初始电荷分布</strong>，再讨论撤场后的<strong>保持机制</strong>。第三部分用温度、湿度和气隙放电的文献数据解释衰减，最后结合不同实验的<strong>测量条件</strong>归纳研究结论。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 02 / 24</span></div><h1 id="title-02">目录｜四个核心问题</h1></header>
+  <div class="reading"><div class="text"><p>整个汇报按照电荷的<strong>完整生命周期</strong>展开，主要回答四个问题：</p>
+<p>首先，电荷是如何注入FEP内部的；其次，为什么撤去外部电场后，电荷仍然能够保持；然后，电荷通过哪些机制流失；最后，如何根据这些机制改善器件的长期稳定性。</p>
+<p>其中，第三部分的<strong>电荷衰减机制</strong>是本次汇报的重点。</p></div></div>
 </section>
 <section class="slide" id="p03" aria-labelledby="title-03">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 03 / 23</span></div><h1 id="title-03">针电极电晕与 FEP 表面沉积</h1></header>
-  <div class="reading"><div class="text"><p><span class="cue">（先指左图针尖，再看右图的电离枪和膜面）</span>左图是针电极电晕装置。针尖附近电场强，<strong>气体发生电离</strong>。右图是另一篇论文的空气电离枪。产生的<strong>负离子</strong>在电场作用下到达 FEP 膜面并积累。接地背电极参与决定电场分布。</p>
-<p>撤场后，沉积在表面或进入<strong>近表层</strong>的部分电荷仍可能留下。下一页看持续偏压下，沿厚度方向测到的空间电荷。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 03 / 24</span></div><h1 id="title-03">电晕充电原理</h1></header>
+  <div class="reading"><div class="text"><p>首先是最常见的电晕极化方法。</p>
+<p><span class="cue">大家看左边的示意图，</span>针尖施加高压以后，局部电场非常强，会使附近<strong>空气发生电离</strong>，产生带电粒子。</p>
+<p>这些离子在电场作用下向FEP表面运动，最终使薄膜获得一定极性的电荷。</p>
+<p>改变电晕电压的极性，就可以分别制备带正电和带负电的FEP薄膜。</p>
+<p>但需要注意，电晕充电首先解决的是如何让FEP带电，并不代表这些电荷已经全部进入<strong>深陷阱</strong>。电荷能不能长期保持，还取决于后续的<strong>迁移和俘获</strong>过程。</p></div></div>
 </section>
 <section class="slide" id="p04" aria-labelledby="title-04">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 04 / 23</span></div><h1 id="title-04">持续直流偏压下的 FEP 空间电荷</h1></header>
-  <div class="reading"><div class="text"><p><span class="cue">（指两张空间电荷图）</span>上下电极加压时，<strong>脉冲电声法</strong>可以跟踪厚度方向的空间电荷。横轴是持续加压的时间，纵轴是<strong>归一化后的厚度位置</strong>，颜色对应电荷密度。左侧是 25 °C，右侧是 50 °C 且存在温度梯度。</p>
-<p>这个实验回答电场还在时，空间电荷在哪里积累。要看撤掉电压后的保持，需要另有<strong>撤场后的测量序列</strong>。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 04 / 24</span></div><h1 id="title-04">高真空电子注入</h1></header>
+  <div class="reading"><div class="text"><p>上一页是通过空气电离产生带电粒子，这一页的文献采用<strong>高真空条件下的电子隧穿注入</strong>。</p>
+<p>这种方法主要是为了减少空气中离子等因素的干扰，更直接地研究电子与聚合物之间的相互作用。</p>
+<p>在强电场作用下，<strong>界面势垒变薄</strong>，电子可以通过隧穿进入聚合物。</p>
+<p>文献比较不同聚合物后发现，FEP具有较强的负电荷获取能力，这与其含氟结构的电子特性有关。</p>
+<p>因此，FEP是比较适合储存负电荷的聚合物材料，但容易获得电子，不等于电子一定能够<strong>长期保持</strong>。</p></div></div>
 </section>
 <section class="slide" id="p05" aria-labelledby="title-05">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 05 / 23</span></div><h1 id="title-05">电晕极化后 FEP 的初始器件输出</h1></header>
-  <div class="reading"><div class="text"><p><span class="cue">（指红蓝线）</span>这幅图比较相同器件条件下的初始输出。蓝线是原膜，红线是电晕极化后的膜。在与 PA 配对的条件下，RRF-FEP3 极化后的初始输出<strong>约为极化前的 17.5 倍</strong>。纵轴是器件测得的<strong>输出电荷密度</strong>。接下来区分这一读数、薄膜表面电位和实际电荷分布。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 05 / 24</span></div><h1 id="title-05">电荷进入FEP内部</h1></header>
+  <div class="reading"><div class="text"><p>前两页讲的是电荷如何到达FEP表面或进入材料，这一页进一步讨论电荷在膜厚方向上的迁移。</p>
+<p>这里采用的是PEA，也就是<strong>脉冲电声法</strong>，可以分析材料内部空间电荷的分布。</p>
+<p>从文献结果可以看到，在<strong>持续直流电场</strong>下，电荷能够向FEP内部迁移；当温度从25摄氏度升高到50摄氏度时，迁移和输运过程会加快。</p>
+<p>这说明温度可以影响电荷在FEP内部的运动。</p>
+<p>不过，这里研究的是持续施加电场的情况，<strong>撤去电场后的迁移过程</strong>还需要单独验证。</p>
+<p>到这里我们知道，电荷既可以注入FEP，也可以在一定条件下向材料内部迁移。但新的问题是：撤去外加电压后，这些电荷为什么没有立即流失？这就涉及FEP内部非常重要的储荷机制——电荷陷阱。</p></div></div>
 </section>
 <section class="slide" id="p06" aria-labelledby="title-06">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 06 / 23</span></div><h1 id="title-06">表面电位测量与电荷分布反演</h1></header>
-  <div class="reading"><div class="text"><p><span class="cue">（左图指三个观测量，右图指探头和扫描网格）</span>单位面积上的电荷量是材料表面的量。探头测的是<strong>表面电位</strong>，其读数还受<strong>探头距离</strong>、样品接地和电荷分布影响。器件输出又会随电极运动和外电路变化。</p>
-<p>右图的研究先逐点扫描电位，再结合测量几何和正则化<strong>估算表面电荷分布</strong>。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 06 / 24</span></div><h1 id="title-06">浅陷阱与深陷阱</h1></header>
+  <div class="reading"><div class="text"><p>这页是理解后面所有衰减现象的基础。</p>
+<p>我们可以把FEP内部的局域陷阱理解为一些能够暂时束缚电子的能量状态。</p>
+<p>它们对电子的束缚能力并不相同。</p>
+<p>对于<strong>浅陷阱</strong>，电子只需要获得较少的热能，就有可能脱离陷阱；而对于<strong>深陷阱</strong>，电子脱离所需要克服的能量障碍更大，所以通常能够保持更长时间。</p>
+<p>因此，FEP电荷衰减经常具有两个特征：<strong>前期衰减比较快，后期逐渐变慢</strong>。</p>
+<p>这里还需要说明，陷阱是一个能量概念，不一定对应某一种确定的化学缺陷。</p></div></div>
 </section>
 <section class="slide" id="p07" aria-labelledby="title-07">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 07 / 23</span></div><h1 id="title-07">浅陷阱较易释放，深陷阱有利于长期保持</h1></header>
-  <div class="reading"><div class="text"><p><span class="cue">（指红色虚线）</span>局域陷阱可以理解为电子容易暂时停留的能量状态。<strong>较浅的陷阱</strong>一般能以较低的能量代价释放电子，<strong>较深的陷阱</strong>在同温度下通常释放较慢。如果样品同时占据不同深度的陷阱，有些电荷可能较快衰减，另一些则保留更久。</p>
-<p>图中 FEP 的 LUMO 和陷阱能级来自作者提出的模型。单凭示意图不能确定深浅陷阱各占多少，后续需要结合<strong>温度响应</strong>。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 07 / 24</span></div><h1 id="title-07">202摄氏度的热刺激放电峰</h1></header>
+  <div class="reading"><div class="text"><p>那么，怎么证明材料中存在能够较稳定地束缚电荷的陷阱呢？</p>
+<p>这篇文献采用了<strong>热刺激放电测试</strong>，也就是TSD。</p>
+<p>实验通过逐渐升高温度，使储存在材料中的电荷释放，并记录对应的放电电流。</p>
+<p>可以看到，负电晕极化FEP在<strong>约202摄氏度</strong>附近出现一个比较明显的放电峰。</p>
+<p>这说明在该实验条件下，有一部分储存电荷需要较高的温度才能产生明显的释放响应。</p>
+<p>不过，202摄氏度是放电峰温，<strong>不是陷阱深度</strong>，也不能仅凭这一温度直接计算陷阱能级。</p></div></div>
 </section>
 <section class="slide" id="p08" aria-labelledby="title-08">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 08 / 23</span></div><h1 id="title-08">热刺激放电谱与陷阱释放</h1></header>
-  <div class="reading"><div class="text"><p><span class="cue">（指插图的开路测量结构，再指宽峰）</span>这一页把上一页的陷阱能级图和实测放电谱对起来。样品是负电晕充电后的波纹 FEP 膜。开路升温时，<strong>热激发</strong>提高载流子脱离局域状态的概率。释放后在内电场里的漂移和电荷分布变化会引起外电路电流。</p>
-<p>图中在每分钟 3 摄氏度的升温条件下，宽峰位于<strong>约 202 摄氏度</strong>。峰位与升温程序和输运条件有关，因此应把它理解为放电响应温区，单凭峰温<strong>无法唯一确定陷阱深度</strong>。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 08 / 24</span></div><h1 id="title-08">160天的长期电荷保持</h1></header>
+  <div class="reading"><div class="text"><p>前面是通过升温研究电荷释放，这一页从长期静置的角度验证电荷保持情况。</p>
+<p>文献发现，负离子注入后的器件，在前80天<strong>短路转移电荷密度</strong>下降了大约17%，之后到160天，<strong>下降趋势明显放缓</strong>。</p>
+<p>这个现象与前面讨论的陷阱模型是相符的。</p>
+<p>早期较容易释放或者重新分布的电荷，可能贡献了较快的衰减；剩余较稳定的电荷，使后期的变化幅度减小。</p>
+<p>这里的结果是器件转移电荷密度，而不是直接测得的FEP内部陷阱占据量，所以它只能作为<strong>间接证据</strong>。</p>
+<p>从前面可以看出，FEP的电荷保持能力与陷阱俘获密切相关。但是，即使电荷已经被俘获，也不代表它完全无法运动。温度、内部电场、湿度以及器件结构，都可能改变电荷的稳定性。所以接下来重点分析：储存在FEP中的电荷究竟是通过哪些路径流失的？</p></div></div>
 </section>
 <section class="slide" id="p09" aria-labelledby="title-09">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 09 / 23</span></div><h1 id="title-09">晶区与非晶区界面可能参与储荷</h1></header>
-  <div class="reading"><div class="text"><p><span class="cue">（看上、下两幅结构示意）</span>上图是商业 FEP，下图是反复流变锻造的 RRF-FEP。作者结合表面分析和衍射，分别讨论了表面含氟基团与起电的关系，以及薄膜内部的界面作用。</p>
-<p>晶区和非晶区的局部结构不同，载流子可能在界面附近聚集并产生<strong>界面极化</strong>。论文提出这是提高储荷能力的一条解释，现有图文<strong>并未分别量化</strong>晶区、非晶区和界面的储荷量。下一页借助一项复合膜研究看热历史怎样影响这种储荷行为。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 09 / 24</span></div><h1 id="title-09">五种电荷衰减路径</h1></header>
+  <div class="reading"><div class="text"><p>这页是整个电荷衰减部分的总览。</p>
+<p>从物理机制上，可以考虑五种主要路径：<strong>热激发脱陷、体内电荷迁移、表面泄漏、异号电荷复合，以及气隙放电</strong>。</p>
+<p>这些过程之间并不是完全独立的。</p>
+<p>比如，升温之后，电子首先可能从陷阱中释放，随后在内部电场作用下迁移；如果迁移到电极附近，就可能发生复合。</p>
+<p>所以，热脱陷本身不一定意味着电荷已经离开材料，它也可能只是<strong>后续迁移或复合过程的起点</strong>。</p></div></div>
 </section>
 <section class="slide" id="p10" aria-labelledby="title-10">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 10 / 23</span></div><h1 id="title-10">淬冷极化后的储荷模型</h1></header>
-  <div class="reading"><div class="text"><p><span class="cue">（依次指高温加压、淬冷和能量井）</span>这项研究使用含 FEP 纳米颗粒的 <strong>Ecoflex 复合膜</strong>。作者提出，载流子在高温和电场下向膜内迁移，快速冷却后有一部分可以被<strong>更深的局域状态</strong>束缚。热刺激去极化电流提供了释放随温度变化的证据。</p>
-<p><strong>纯 FEP</strong> 没有同样的颗粒和基体界面，因此用它解释纯膜时需要回到纯膜实验。接下来先看<strong>纯 FEP</strong> 在长期跟踪中还保留了多少器件输出。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 10 / 24</span></div><h1 id="title-10">五种衰减路径的证据比较</h1></header>
+  <div class="reading"><div class="text"><p>这里对前面的五种路径做一个文献证据梳理。</p>
+<p>可以发现，<strong>不同机制的证据强弱</strong>并不相同。</p>
+<p>例如，FEP的热激活衰减已有直接实验结果；体内迁移也有施加电场时的<strong>PEA证据</strong>。</p>
+<p>但是，背电极复合以及部分气隙放电过程，主要依赖其他聚合物体系的机理研究。</p>
+<p>因此，对于我们自己的FEP器件，这些路径应该作为有物理依据的<strong>候选机制</strong>，而不是全部已经得到验证的结论。</p></div></div>
 </section>
 <section class="slide" id="p11" aria-labelledby="title-11">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 11 / 23</span></div><h1 id="title-11">负离子注入后 FEP 的长期保持</h1></header>
-  <div class="reading"><div class="text"><p><span class="cue">（沿横轴从初始读数指到第 160 天）</span>Wang 等用空气电离装置向 FEP 引入负离子，再用器件的<strong>短路转移电荷密度</strong>跟踪输出。初始约每平方米 240 微库仑，<strong>前 80 天</strong>降至约 200 微库仑，之后<strong>变化趋缓</strong>。</p>
-<p>这是特定样品与测量条件下的结果。要解释曲线的快慢阶段，接下来分别看热脱陷、重分布和表面泄漏等路径。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 11 / 24</span></div><h1 id="title-11">背电极复合</h1></header>
+  <div class="reading"><div class="text"><p>这一页非常重要，因为我们的FEP背面同样有金属电极。</p>
+<p><span class="cue">大家看图a，</span>假设薄膜表面储存负电荷，那么背面的金属电极会<strong>感应出正电荷</strong>。</p>
+<p>这种电荷分布会在膜内部形成电场。</p>
+<p>如果一部分电子从浅陷阱中释放，在内部电场和浓度梯度作用下，就可能<strong>向背电极迁移</strong>，并通过相关过程失去原来的储荷状态。</p>
+<p><span class="cue">图b强调</span>深浅陷阱对于电荷迁移的影响。</p>
+<p><span class="cue">图c则提示</span>膜厚也是重要因素，较薄的绝缘层可能使电荷更容易到达界面。</p>
+<p>不过，这篇文献中的模型主要来自<strong>PVDF/PDMS体系</strong>。对于FEP/Au结构，我们还需要通过实验判断背电极复合是否同样显著。</p></div></div>
 </section>
 <section class="slide" id="p12" aria-labelledby="title-12">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 12 / 23</span></div><h1 id="title-12">脱陷之后，电荷可能沿多条路径迁移或损失</h1></header>
-  <div class="reading"><div class="text"><p><span class="cue">（沿图中陷阱、膜内和接地电极指读）</span>脱陷是载流子离开原来的局域状态，之后它可能被<strong>再次俘获</strong>，也可能继续移动。</p>
-<p>向膜内迁移会<strong>改变空间分布</strong>，甚至在净电荷近似相同的情况下改变测得的电位。<strong>沿表面</strong>向边缘或接地点输运，会为电荷损失提供通道。正负载流子相遇时可以<strong>复合</strong>。</p>
-<p>还有一种发生在器件运动阶段的通道，即<strong>气隙放电</strong>。下一页先把机制和各自的证据对起来。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 12 / 24</span></div><h1 id="title-12">温度为什么加快电荷衰减</h1></header>
+  <div class="reading"><div class="text"><p>前面讨论了可能的迁移路径，这一页通过实验研究温度的影响。</p>
+<p>文献对FEP在不同温度条件下的电荷保持进行了比较。</p>
+<p>从结果可以看到，<strong>升温会加快电荷保持量的下降</strong>。</p>
+<p>此外，作者还采用KPFM，也就是<strong>开尔文探针力显微镜</strong>，观察局部表面电位分布。</p>
+<p>热处理后，原本比较明显的<strong>局部电位差异减弱</strong>。</p>
+<p>这说明升温不仅可能影响电荷保留量，还会改变其空间分布。</p></div></div>
 </section>
 <section class="slide" id="p13" aria-labelledby="title-13">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 13 / 23</span></div><h1 id="title-13">衰减路径与文献证据</h1></header>
-  <div class="reading"><div class="text"><p><span class="cue">（按五行给出证据）</span>热脱陷的支持来自 FEP 的<strong>温度依赖</strong>和热激活拟合。体内迁移有持续偏压下的 PEA 图作为分布证据，<strong>撤场后的演化</strong>仍需单独测量。</p>
-<p>表面泄漏主要借助 PTFE 的湿度对照来理解，需在 FEP 上控制湿度及边缘电学条件再验证。复合在机制图中合理，但已有电位数据<strong>无法单独给出复合份额</strong>。</p>
-<p>气隙放电证据则对应 论文中的 FEP 器件和特定气隙间距。下面依次展开有明确图证的温度、湿度和气隙三组结果。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 13 / 24</span></div><h1 id="title-13">Arrhenius活化能</h1></header>
+  <div class="reading"><div class="text"><p>那么，这种温度依赖性能够进行定量分析吗？</p>
+<p>文献通过<strong>Arrhenius关系</strong>，对不同温度下的衰减行为进行了拟合。</p>
+<p>得到的表观活化能大约为<strong>0.354和0.402电子伏特</strong>。</p>
+<p>这个结果说明，相关的快速衰减过程具有明显的热激活特征。</p>
+<p>这里容易产生一个疑问：为什么前面TSD放电峰出现在202摄氏度，现在得到的活化能却只有0.35到0.40电子伏特？</p>
+<p>原因是两者采用的<strong>实验条件和分析模型不同</strong>，反映的动力学过程也未必相同。</p>
+<p>因此，不能简单地把0.35到0.40电子伏特当作FEP所有浅陷阱的真实深度，更不能将其与202摄氏度峰直接一一对应。</p></div></div>
 </section>
 <section class="slide" id="p14" aria-labelledby="title-14">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 14 / 23</span></div><h1 id="title-14">升温后的电荷衰减与局部电位变化</h1></header>
-  <div class="reading"><div class="text"><p><span class="cue">（先指左侧两张曲线，再指右侧高注入列）</span>左侧第一张图在 <strong>333 K</strong> 下跟踪不同注入电流密度的衰减。第二张在处理 60 分钟后比较不同温度，固定注入条件时，<strong>高温组保留量较低</strong>。</p>
-<p>右图是<strong>局部电位扫描</strong>，高注入列在 373 K 后对比明显减弱。两组结果都指向升温后带电状态的变化，下一页再看作者如何用热激活拟合描述这一变化。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 14 / 24</span></div><h1 id="title-14">湿度对电荷衰减的影响</h1></header>
+  <div class="reading"><div class="text"><p>除了温度，湿度也是影响聚合物驻极体稳定性的重要因素。</p>
+<p>这一页研究对象是<strong>PTFE</strong>，与FEP同属于含氟聚合物，但并不是同一种材料。</p>
+<p>文献比较了不同湿度下的正负电荷衰减情况。</p>
+<p>可以发现，湿度升高会加快电荷衰减，而且在该实验中，<strong>正电荷对湿度更加敏感</strong>。</p>
+<p>一种可能的解释是，<strong>吸附水</strong>改变了材料表面或界面的电荷输运条件，为电荷泄漏提供了通道。</p>
+<p>这里的极性差异主要来自<strong>PTFE</strong>实验，是否适用于FEP，还需要进一步验证。</p></div></div>
 </section>
 <section class="slide" id="p15" aria-labelledby="title-15">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 15 / 23</span></div><h1 id="title-15">Arrhenius 拟合给出表观活化能</h1></header>
-  <div class="reading"><div class="text"><p><span class="cue">（指图例和两条拟合线）</span>作者把温度依赖用 <strong>Arrhenius 关系</strong>来分析。对 10 和 120 μA/cm² 两种注入电流密度，图中给出的表观活化能分别是 <strong>0.354 和 0.402 eV</strong>。两个值对应论文的样品、测量和拟合条件。</p>
-<p>我这里用“表观”是因为拟合值来自宏观电荷变化。实际可能同时包含<strong>脱陷和后续输运</strong>，不能用一个拟合值指认所有微观陷阱。就这篇论文而言，更直接的结论是两种注入条件下都观测到明显的温度依赖。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 15 / 24</span></div><h1 id="title-15">干燥环境下的极性差异</h1></header>
+  <div class="reading"><div class="text"><p>这一页还是同一篇PTFE文献，但研究的是较长时间的电荷保持。</p>
+<p>在干燥条件下，<strong>约140天后</strong>，<strong>负电荷保留率为90%，而正电荷约为95%</strong>。</p>
+<p>也就是说，在该实验条件下，正电荷反而具有更好的保持效果。</p>
+<p>结合上一页就能发现，不能简单认为正电荷一定比负电荷稳定，或者负电荷一定更稳定。</p>
+<p>它们的<strong>相对稳定性</strong>可能随环境和实验条件发生变化。</p>
+<p>这对于我们上下两片FEP分别储存正、负电荷的器件尤其值得关注。</p></div></div>
 </section>
 <section class="slide" id="p16" aria-labelledby="title-16">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 16 / 23</span></div><h1 id="title-16">湿度影响：PTFE 正负电荷响应不同</h1></header>
-  <div class="reading"><div class="text"><p><span class="cue">（指两张图中同一颜色的线）</span>这里比较 50%、70% 和 90% 的<strong>相对湿度</strong>，横轴到 168 小时，也就是 7 天。左侧是负电荷，右侧是正电荷。高湿条件下电荷下降更明显，右图的变化尤其容易看出来。</p>
-<p>一种解释是水分改变<strong>表面的传导条件</strong>，也可能让边缘和不同区域间的电荷更容易重新分布。图中同时显示湿度和极性相关的差异。它提供的是 <strong>PTFE 体系</strong>下的受控比较，不能由这些数值直接推算 FEP 的湿度响应。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 16 / 24</span></div><h1 id="title-16">FEP自身的湿度实验</h1></header>
+  <div class="reading"><div class="text"><p>前面两页主要引用PTFE的结果，这一页是直接针对FEP的实验。</p>
+<p>作者首先对负电晕极化后的FEP进行<strong>120摄氏度、30分钟</strong>的预老化处理，然后比较不同湿度环境下的电位保持。</p>
+<p>可以看到，在干燥和约60%相对湿度条件下，电位相对稳定。</p>
+<p>但是在<strong>99%相对湿度</strong>下，10天后表面电位下降到了<strong>初始值的75%左右</strong>。</p>
+<p>这说明极高湿度确实可能明显影响FEP的长期电位保持性能。</p>
+<p>因此，后续除了优化材料本身的储荷能力，还应该考虑器件的防潮封装，以及封装材料的水汽阻隔性能。</p></div></div>
 </section>
 <section class="slide" id="p17" aria-labelledby="title-17">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 17 / 23</span></div><h1 id="title-17">PTFE 的长期保持随电荷极性变化</h1></header>
-  <div class="reading"><div class="text"><p><span class="cue">（先看左图，再指右图同一个时间点）</span>两幅图都是 PTFE。在论文的条件下，到<strong>第 140 天</strong>时，左侧负电荷<strong>约保留 90%</strong>，右侧正电荷<strong>约保留 95%</strong>。</p>
-<p>内嵌图还展示了三个时刻的空间分布。这个对照补充了前一页的七天湿度实验，说明讨论湿度或长期保持时，也应交代注入电荷的极性。这两个保持率对应这里的 PTFE 样品。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 17 / 24</span></div><h1 id="title-17">气隙放电与Paschen击穿</h1></header>
+  <div class="reading"><div class="text"><p>前面研究的是静置或者热湿环境下的电荷衰减。</p>
+<p>但我们的器件还要在机械变形过程中工作，这就可能涉及另一种机制——气隙放电。</p>
+<p><span class="cue">大家看图中的电压关系。</span></p>
+<p>当两个带电表面分离时，部分电压会分配到<strong>空气间隙</strong>上。</p>
+<p>如果实际气隙电压超过相应条件下的<strong>击穿阈值</strong>，就可能产生<strong>局部放电</strong>。</p>
+<p>这种放电会改变界面上的电荷分布，甚至导致部分表面电荷被中和。</p>
+<p>所以对于存在微气隙的器件，不能只考虑材料内部的电荷陷阱，还需要考虑局部电场是否会引起空气击穿。</p></div></div>
 </section>
 <section class="slide" id="p18" aria-labelledby="title-18">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 18 / 23</span></div><h1 id="title-18">高湿环境下的 FEP 电位衰减</h1></header>
-  <div class="reading"><div class="text"><p><span class="cue">（指黑、红、蓝三条曲线）</span>前面用 PTFE 做湿度对照，这里回到 FEP。论文采用波纹 FEP，负电晕充电后先在 120 摄氏度预老化 30 分钟，再在室温下分别放置于干燥、实验室环境和 <strong>99% 相对湿度</strong>。</p>
-<p>干燥和约 60% 湿度下变化较小，最高湿的样品在约 10 天后降至<strong>初始电位的 75%</strong>。</p>
-<p>吸附水提高<strong>沿面导电性</strong>是一个可能的解释。这里直接测到的是电位衰减，沿面泄漏和电荷重新分布的份额仍需独立测量。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 18 / 24</span></div><h1 id="title-18">微放电为什么可能发生反号</h1></header>
+  <div class="reading"><div class="text"><p>这一页进一步讨论局部微放电的动态过程。</p>
+<p>Nature Physics的这项研究发现，在特定接触带电和微气隙条件下，局部放电并不一定在表面电荷刚好被中和时停止。</p>
+<p>因为周围区域的电荷仍然可能维持局部电场，所以电荷可能继续转移，甚至发生<strong>局部极性反转</strong>。</p>
+<p>图中展示的就是从放电启动，到电荷中和，再到局部反号的过程。</p>
+<p>不过，这个反号过程是<strong>特定模型和实验条件</strong>下的结果，不能认为所有FEP器件的气隙放电都会发生反号。</p>
+<p>它对我们的启示是，机械形变引起的<strong>局部电场变化</strong>，也可能成为影响储荷稳定性的因素。</p>
+<p>通过前面这些文献，我们可以看到，FEP的电荷衰减实际上涉及材料内部、材料表面，以及器件界面三个层面。内部主要涉及热脱陷与迁移；表面主要涉及湿度诱导的泄漏；器件界面则可能涉及电极复合和气隙放电。既然已经知道了这些可能的衰减路径，那么最后一个问题就是：能不能针对这些路径，通过极化工艺和结构设计来提高电荷稳定性？</p></div></div>
 </section>
 <section class="slide" id="p19" aria-labelledby="title-19">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 19 / 23</span></div><h1 id="title-19">极化后测量中的气隙放电</h1></header>
-  <div class="reading"><div class="text"><p><span class="cue">（左指气隙，右指击穿曲线）</span>当带电 FEP 和对面的电极之间存在空气层时，气隙会承担一部分电压降。右图红线表示给定间距的<strong>空气击穿阈值</strong>。实际气隙电压超过阈值后可能放电，放电产生的载流子可能<strong>屏蔽或中和</strong>部分表面电荷。</p>
-<p>这一效应取决于<strong>气隙和器件结构</strong>，解读极化后读数时需交代这些条件。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 19 / 24</span></div><h1 id="title-19">升温极化与快速冷却</h1></header>
+  <div class="reading"><div class="text"><p>第一种思路是优化电荷注入和俘获过程。</p>
+<p>这篇2026年的文献采用<strong>FEP/Ecoflex复合体系</strong>，通过<strong>升温、加压极化与快速冷却</strong>改善电荷保持。</p>
+<p>在升温和外加电场条件下，载流子的迁移和分布能够发生变化。</p>
+<p>快速冷却则可能使部分载流子被更稳定地俘获，从而减少后续的释放。</p>
+<p>作者通过<strong>热刺激放电实验</strong>，为这种储荷机制提供了支持。</p>
+<p>不过，具体改善效果与材料结构和处理条件有关，不能直接认为快速淬冷一定会提高所有FEP器件的稳定性。</p></div></div>
 </section>
 <section class="slide" id="p20" aria-labelledby="title-20">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 20 / 23</span></div><h1 id="title-20">同种复合膜的电位保持随极化方式而变</h1></header>
-  <div class="reading"><div class="text"><p><span class="cue">（指三条曲线）</span>同配方的 5-FEP 复合膜经电晕、热极化和淬冷极化后，初始电位就已不同。第 10 天的电位绝对值分别约保留各自初值的 <strong>71%、72% 和 89%</strong>。</p>
-<p>归一化结果提示，<strong>极化和热历史</strong>既改变起点，也能改变相对衰减。这里的 FEP 是颗粒填料，<strong>基体为 Ecoflex</strong>。比较纯 FEP 时，要按纯膜自己的结构、极化方式和对应工况判断。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 20 / 24</span></div><h1 id="title-20">不同极化方式的保持率对比</h1></header>
+  <div class="reading"><div class="text"><p>这一页是上一项研究的直接性能证据。</p>
+<p>在相同复合材料配方下，作者比较了<strong>普通电晕、热极化和淬冷极化</strong>三种方式。</p>
+<p>10天后，三组的归一化电位保持率分别约为<strong>71%、72%和89%</strong>。</p>
+<p>可以发现，淬冷极化组具有更加明显的保持率优势。</p>
+<p>说明在该材料体系下，改变极化过程中的热历史是一种有效的改善方法。</p>
+<p>但需要注意，这里对比的是各组<strong>相对于自身初始电位的保持率</strong>，并不代表淬冷组的绝对储荷量一定最大。</p></div></div>
 </section>
 <section class="slide" id="p21" aria-labelledby="title-21">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 21 / 23</span></div><h1 id="title-21">背面介质与电极边界的影响</h1></header>
-  <div class="reading"><div class="text"><p><span class="cue">（先看上半图的接触状态，再看下方对照）</span>Lin 等提出<strong>异号电荷协同模型</strong>，讨论薄膜两面的异号电荷以及与外界接触后电位怎样变化。上图里几种不同的接触边界对应不同的电荷保留情况。下方 b–d 是单层 PTFE，e 比较五种单层驻极体，其中包括 FEP。</p>
-<p>对这个主题来说，值得关注的是同一片带电膜在空气中、贴着介质或贴着电极时，<strong>外部电场边界</strong>已经变了。比较两次电位测量时，翻面、背面接触和<strong>电极接地</strong>这些条件都会影响读数的解释。论文也讨论了含 FEP 在内的其他材料，具体结果按各自实验边界理解。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 21 / 24</span></div><h1 id="title-21">背电极镜像电荷</h1></header>
+  <div class="reading"><div class="text"><p>第二种思路是调控器件的电场分布。</p>
+<p>带电FEP靠近金属电极时，金属表面会产生感应电荷，也就是我们所说的<strong>镜像电荷</strong>。</p>
+<p>这些感应电荷会改变薄膜附近的电势和电场分布，从而影响储存电荷的稳定性。</p>
+<p>这里需要结合第11页理解。</p>
+<p>第11页指出，背电极也可能成为载流子迁移和复合的终点；而这一页说明，适当的电极或介电层结构可以通过<strong>静电屏蔽</strong>改变电荷保持行为。</p>
+<p>两者并不一定矛盾，因为电极同时改变静电场和<strong>电荷输运边界条件</strong>，其最终作用取决于界面结构与材料性质。</p>
+<p>所以电极结构需要优化，而不是简单地认为有背电极就一定能够改善储荷。</p></div></div>
 </section>
 <section class="slide" id="p22" aria-labelledby="title-22">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 22 / 23</span></div><h1 id="title-22">表面电位保持率与热刺激放电</h1></header>
-  <div class="reading"><div class="text"><p><span class="cue">（左指探头与样品台，右指加热器与静电计）</span>放置过程中可以测表面电位，归一化时要先确定<strong>起算点</strong>。以首次读数为基准会纳入早期衰减，等快衰减后起算则反映后段保持。</p>
-<p>热刺激放电是另一种观测，在控温升温时记录<strong>放电电流</strong>。电流峰可能包含载流子释放和极化松弛，要结合<strong>升温速率</strong>、样品结构及电极配置解释。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 22 / 24</span></div><h1 id="title-22">引入电子阻挡层</h1></header>
+  <div class="reading"><div class="text"><p>第三种思路是在储荷材料和背电极之间引入合适的功能层。</p>
+<p>如果电荷确实会向背电极迁移并发生损失，那么我们可以考虑利用<strong>俘获层或者电子阻挡层</strong>，降低这种损失的可能性。</p>
+<p>但这里有一个设计上的权衡。</p>
+<p>阻挡层过薄，可能无法有效抑制电荷传输；阻挡层过厚，又可能改变电容结构，影响器件的静电感应和输出性能。</p>
+<p>文献中的<strong>PDMS/TiOₓ体系</strong>提供了一种思路，但还不能直接证明同样的阻挡层在FEP/Au界面一定有效。</p>
+<p>因此，后续需要把<strong>储荷稳定性与器件输出性能</strong>放在一起评价。</p></div></div>
 </section>
 <section class="slide" id="p23" aria-labelledby="title-23">
-  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 23 / 23</span></div><h1 id="title-23">研究总结</h1></header>
-  <div class="reading"><div class="text"><p>第一，极化方式、电场和电极边界共同影响 FEP 的<strong>初始电荷量和分布</strong>。撤场后，电荷可以留在表面，也可能留在膜内。</p>
-<p>第二，<strong>局域陷阱</strong>有助于电荷保留，升温会促进脱陷和输运。长期跟踪中，特定器件的短路转移电荷密度先降后趋缓。</p>
-<p>第三，比较保持率时，应先说清测量量，并<strong>统一温湿度、电极边界和起算时刻</strong>。</p>
-<p>我的汇报到这里，谢谢大家，欢迎讨论。</p></div></div>
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 23 / 24</span></div><h1 id="title-23">总结｜电荷为什么稳、怎么掉、怎么保</h1></header>
+  <div class="reading"><div class="text"><p>最后，对本次汇报做一个总结。</p>
+<p>首先，FEP可以通过电晕充电等方式获得电荷，并且在一定条件下使电荷向材料内部迁移。</p>
+<p>其次，FEP的电荷保持与<strong>局域陷阱</strong>密切相关，不同稳定程度的储荷状态可能造成前期较快、后期较慢的衰减特征。</p>
+<p>第三，电荷衰减不是单一因素决定的。温度能够促进脱陷与迁移，湿度可能加快表面泄漏，而电极界面和气隙结构也可能引入额外的损失路径。</p>
+<p>最后，针对这些机制，可以考虑从三个方向改善稳定性：<strong>优化极化工艺、控制环境湿度、调节电极界面和阻挡层结构</strong>。</p>
+<p>对我们自己的FEP压电驻极体而言，下一步最关键的不是直接判断哪一种机制占主导，而是设计针对性的实验，<strong>把不同的衰减过程区分出来</strong>。</p>
+<p>例如，分别研究正负极化FEP在不同温度、湿度下的电位保持，再结合热刺激放电及器件输出测试，判断各因素的影响。</p>
+<p>以上就是本次汇报的主要内容，谢谢各位老师。</p></div></div>
+</section>
+<section class="slide" id="p24" aria-labelledby="title-24">
+  <header class="header"><div class="label"><span>组会提词</span><span class="index">PPT 24 / 24</span></div><h1 id="title-24">致谢</h1></header>
+  <div class="reading"><div class="text"><p>感谢各位老师批评指正。</p></div></div>
 </section>
   </main>
   <nav class="dock" aria-label="PPT 页码">
     <a class="step prev" href="#p01" aria-label="上一页" title="上一页（←）"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
-    <div class="numbers"><a href="#p01" aria-label="第 1 页，高压极化后 FEP 的电荷保持与衰减机制">01</a>
-<a href="#p02" aria-label="第 2 页，目录">02</a>
-<a href="#p03" aria-label="第 3 页，针电极电晕与 FEP 表面沉积">03</a>
-<a href="#p04" aria-label="第 4 页，持续直流偏压下的 FEP 空间电荷">04</a>
-<a href="#p05" aria-label="第 5 页，电晕极化后 FEP 的初始器件输出">05</a>
-<a href="#p06" aria-label="第 6 页，表面电位测量与电荷分布反演">06</a>
-<a href="#p07" aria-label="第 7 页，浅陷阱较易释放，深陷阱有利于长期保持">07</a>
-<a href="#p08" aria-label="第 8 页，热刺激放电谱与陷阱释放">08</a>
-<a href="#p09" aria-label="第 9 页，晶区与非晶区界面可能参与储荷">09</a>
-<a href="#p10" aria-label="第 10 页，淬冷极化后的储荷模型">10</a>
-<a href="#p11" aria-label="第 11 页，负离子注入后 FEP 的长期保持">11</a>
-<a href="#p12" aria-label="第 12 页，脱陷之后，电荷可能沿多条路径迁移或损失">12</a>
-<a href="#p13" aria-label="第 13 页，衰减路径与文献证据">13</a>
-<a href="#p14" aria-label="第 14 页，升温后的电荷衰减与局部电位变化">14</a>
-<a href="#p15" aria-label="第 15 页，Arrhenius 拟合给出表观活化能">15</a>
-<a href="#p16" aria-label="第 16 页，湿度影响：PTFE 正负电荷响应不同">16</a>
-<a href="#p17" aria-label="第 17 页，PTFE 的长期保持随电荷极性变化">17</a>
-<a href="#p18" aria-label="第 18 页，高湿环境下的 FEP 电位衰减">18</a>
-<a href="#p19" aria-label="第 19 页，极化后测量中的气隙放电">19</a>
-<a href="#p20" aria-label="第 20 页，同种复合膜的电位保持随极化方式而变">20</a>
-<a href="#p21" aria-label="第 21 页，背面介质与电极边界的影响">21</a>
-<a href="#p22" aria-label="第 22 页，表面电位保持率与热刺激放电">22</a>
-<a href="#p23" aria-label="第 23 页，研究总结">23</a></div>
+    <div class="numbers"><a href="#p01" aria-label="第 1 页，单层FEP压电驻极体的电荷保持与衰减原理">01</a>
+<a href="#p02" aria-label="第 2 页，目录｜四个核心问题">02</a>
+<a href="#p03" aria-label="第 3 页，电晕充电原理">03</a>
+<a href="#p04" aria-label="第 4 页，高真空电子注入">04</a>
+<a href="#p05" aria-label="第 5 页，电荷进入FEP内部">05</a>
+<a href="#p06" aria-label="第 6 页，浅陷阱与深陷阱">06</a>
+<a href="#p07" aria-label="第 7 页，202摄氏度的热刺激放电峰">07</a>
+<a href="#p08" aria-label="第 8 页，160天的长期电荷保持">08</a>
+<a href="#p09" aria-label="第 9 页，五种电荷衰减路径">09</a>
+<a href="#p10" aria-label="第 10 页，五种衰减路径的证据比较">10</a>
+<a href="#p11" aria-label="第 11 页，背电极复合">11</a>
+<a href="#p12" aria-label="第 12 页，温度为什么加快电荷衰减">12</a>
+<a href="#p13" aria-label="第 13 页，Arrhenius活化能">13</a>
+<a href="#p14" aria-label="第 14 页，湿度对电荷衰减的影响">14</a>
+<a href="#p15" aria-label="第 15 页，干燥环境下的极性差异">15</a>
+<a href="#p16" aria-label="第 16 页，FEP自身的湿度实验">16</a>
+<a href="#p17" aria-label="第 17 页，气隙放电与Paschen击穿">17</a>
+<a href="#p18" aria-label="第 18 页，微放电为什么可能发生反号">18</a>
+<a href="#p19" aria-label="第 19 页，升温极化与快速冷却">19</a>
+<a href="#p20" aria-label="第 20 页，不同极化方式的保持率对比">20</a>
+<a href="#p21" aria-label="第 21 页，背电极镜像电荷">21</a>
+<a href="#p22" aria-label="第 22 页，引入电子阻挡层">22</a>
+<a href="#p23" aria-label="第 23 页，总结｜电荷为什么稳、怎么掉、怎么保">23</a>
+<a href="#p24" aria-label="第 24 页，致谢">24</a></div>
     <a class="step next" href="#p02" aria-label="下一页" title="下一页（→）"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
-    <label class="jump"><span aria-hidden="true">跳页</span><select aria-label="跳到指定的 PPT 页"><option value="p01">01 · 高压极化后 FEP 的电荷保持与衰减机制</option>
-<option value="p02">02 · 目录</option>
-<option value="p03">03 · 针电极电晕与 FEP 表面沉积</option>
-<option value="p04">04 · 持续直流偏压下的 FEP 空间电荷</option>
-<option value="p05">05 · 电晕极化后 FEP 的初始器件输出</option>
-<option value="p06">06 · 表面电位测量与电荷分布反演</option>
-<option value="p07">07 · 浅陷阱较易释放，深陷阱有利于长期保持</option>
-<option value="p08">08 · 热刺激放电谱与陷阱释放</option>
-<option value="p09">09 · 晶区与非晶区界面可能参与储荷</option>
-<option value="p10">10 · 淬冷极化后的储荷模型</option>
-<option value="p11">11 · 负离子注入后 FEP 的长期保持</option>
-<option value="p12">12 · 脱陷之后，电荷可能沿多条路径迁移或损失</option>
-<option value="p13">13 · 衰减路径与文献证据</option>
-<option value="p14">14 · 升温后的电荷衰减与局部电位变化</option>
-<option value="p15">15 · Arrhenius 拟合给出表观活化能</option>
-<option value="p16">16 · 湿度影响：PTFE 正负电荷响应不同</option>
-<option value="p17">17 · PTFE 的长期保持随电荷极性变化</option>
-<option value="p18">18 · 高湿环境下的 FEP 电位衰减</option>
-<option value="p19">19 · 极化后测量中的气隙放电</option>
-<option value="p20">20 · 同种复合膜的电位保持随极化方式而变</option>
-<option value="p21">21 · 背面介质与电极边界的影响</option>
-<option value="p22">22 · 表面电位保持率与热刺激放电</option>
-<option value="p23">23 · 研究总结</option></select></label>
+    <label class="jump"><span aria-hidden="true">跳页</span><select aria-label="跳到指定的 PPT 页"><option value="p01">01 · 单层FEP压电驻极体的电荷保持与衰减原理</option>
+<option value="p02">02 · 目录｜四个核心问题</option>
+<option value="p03">03 · 电晕充电原理</option>
+<option value="p04">04 · 高真空电子注入</option>
+<option value="p05">05 · 电荷进入FEP内部</option>
+<option value="p06">06 · 浅陷阱与深陷阱</option>
+<option value="p07">07 · 202摄氏度的热刺激放电峰</option>
+<option value="p08">08 · 160天的长期电荷保持</option>
+<option value="p09">09 · 五种电荷衰减路径</option>
+<option value="p10">10 · 五种衰减路径的证据比较</option>
+<option value="p11">11 · 背电极复合</option>
+<option value="p12">12 · 温度为什么加快电荷衰减</option>
+<option value="p13">13 · Arrhenius活化能</option>
+<option value="p14">14 · 湿度对电荷衰减的影响</option>
+<option value="p15">15 · 干燥环境下的极性差异</option>
+<option value="p16">16 · FEP自身的湿度实验</option>
+<option value="p17">17 · 气隙放电与Paschen击穿</option>
+<option value="p18">18 · 微放电为什么可能发生反号</option>
+<option value="p19">19 · 升温极化与快速冷却</option>
+<option value="p20">20 · 不同极化方式的保持率对比</option>
+<option value="p21">21 · 背电极镜像电荷</option>
+<option value="p22">22 · 引入电子阻挡层</option>
+<option value="p23">23 · 总结｜电荷为什么稳、怎么掉、怎么保</option>
+<option value="p24">24 · 致谢</option></select></label>
   </nav>
-  <noscript><nav class="fallback" aria-label="选择幻灯片"><a href="#p01" aria-label="第 1 页，高压极化后 FEP 的电荷保持与衰减机制">01</a>
-<a href="#p02" aria-label="第 2 页，目录">02</a>
-<a href="#p03" aria-label="第 3 页，针电极电晕与 FEP 表面沉积">03</a>
-<a href="#p04" aria-label="第 4 页，持续直流偏压下的 FEP 空间电荷">04</a>
-<a href="#p05" aria-label="第 5 页，电晕极化后 FEP 的初始器件输出">05</a>
-<a href="#p06" aria-label="第 6 页，表面电位测量与电荷分布反演">06</a>
-<a href="#p07" aria-label="第 7 页，浅陷阱较易释放，深陷阱有利于长期保持">07</a>
-<a href="#p08" aria-label="第 8 页，热刺激放电谱与陷阱释放">08</a>
-<a href="#p09" aria-label="第 9 页，晶区与非晶区界面可能参与储荷">09</a>
-<a href="#p10" aria-label="第 10 页，淬冷极化后的储荷模型">10</a>
-<a href="#p11" aria-label="第 11 页，负离子注入后 FEP 的长期保持">11</a>
-<a href="#p12" aria-label="第 12 页，脱陷之后，电荷可能沿多条路径迁移或损失">12</a>
-<a href="#p13" aria-label="第 13 页，衰减路径与文献证据">13</a>
-<a href="#p14" aria-label="第 14 页，升温后的电荷衰减与局部电位变化">14</a>
-<a href="#p15" aria-label="第 15 页，Arrhenius 拟合给出表观活化能">15</a>
-<a href="#p16" aria-label="第 16 页，湿度影响：PTFE 正负电荷响应不同">16</a>
-<a href="#p17" aria-label="第 17 页，PTFE 的长期保持随电荷极性变化">17</a>
-<a href="#p18" aria-label="第 18 页，高湿环境下的 FEP 电位衰减">18</a>
-<a href="#p19" aria-label="第 19 页，极化后测量中的气隙放电">19</a>
-<a href="#p20" aria-label="第 20 页，同种复合膜的电位保持随极化方式而变">20</a>
-<a href="#p21" aria-label="第 21 页，背面介质与电极边界的影响">21</a>
-<a href="#p22" aria-label="第 22 页，表面电位保持率与热刺激放电">22</a>
-<a href="#p23" aria-label="第 23 页，研究总结">23</a></nav></noscript>
+  <noscript><nav class="fallback" aria-label="选择幻灯片"><a href="#p01" aria-label="第 1 页，单层FEP压电驻极体的电荷保持与衰减原理">01</a>
+<a href="#p02" aria-label="第 2 页，目录｜四个核心问题">02</a>
+<a href="#p03" aria-label="第 3 页，电晕充电原理">03</a>
+<a href="#p04" aria-label="第 4 页，高真空电子注入">04</a>
+<a href="#p05" aria-label="第 5 页，电荷进入FEP内部">05</a>
+<a href="#p06" aria-label="第 6 页，浅陷阱与深陷阱">06</a>
+<a href="#p07" aria-label="第 7 页，202摄氏度的热刺激放电峰">07</a>
+<a href="#p08" aria-label="第 8 页，160天的长期电荷保持">08</a>
+<a href="#p09" aria-label="第 9 页，五种电荷衰减路径">09</a>
+<a href="#p10" aria-label="第 10 页，五种衰减路径的证据比较">10</a>
+<a href="#p11" aria-label="第 11 页，背电极复合">11</a>
+<a href="#p12" aria-label="第 12 页，温度为什么加快电荷衰减">12</a>
+<a href="#p13" aria-label="第 13 页，Arrhenius活化能">13</a>
+<a href="#p14" aria-label="第 14 页，湿度对电荷衰减的影响">14</a>
+<a href="#p15" aria-label="第 15 页，干燥环境下的极性差异">15</a>
+<a href="#p16" aria-label="第 16 页，FEP自身的湿度实验">16</a>
+<a href="#p17" aria-label="第 17 页，气隙放电与Paschen击穿">17</a>
+<a href="#p18" aria-label="第 18 页，微放电为什么可能发生反号">18</a>
+<a href="#p19" aria-label="第 19 页，升温极化与快速冷却">19</a>
+<a href="#p20" aria-label="第 20 页，不同极化方式的保持率对比">20</a>
+<a href="#p21" aria-label="第 21 页，背电极镜像电荷">21</a>
+<a href="#p22" aria-label="第 22 页，引入电子阻挡层">22</a>
+<a href="#p23" aria-label="第 23 页，总结｜电荷为什么稳、怎么掉、怎么保">23</a>
+<a href="#p24" aria-label="第 24 页，致谢">24</a></nav></noscript>
 </div>
 <script>
 (() => {
